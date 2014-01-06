@@ -111,8 +111,17 @@ groupifyMulAtoms (MulE e1 e2) = MulE (groupifyMulAtoms e1) (groupifyMulAtoms e2)
 groupifyMulAtoms (AddE e1 e2) = AddE (groupifyMulAtoms e1) (groupifyMulAtoms e2)
 groupifyMulAtoms (IntE e v l) = IntE (groupifyMulAtoms e) v l
 
-substitute :: Num a => Int -> V.Vector Int -> Expr a -> Expr a
-substitute = undefined
+substitute :: (Num a, Eq a) => Int -> V.Vector Int -> Expr a -> Expr a
+substitute v vec (MulE e1 e2) = MulE (substitute v vec e1) (substitute v vec e2)
+substitute v vec (AddE e1 e2) = AddE (substitute v vec e1) (substitute v vec e2)
+substitute v vec (IntE _ _ _) = error "substitute: integral? that should not happen"
+substitute v vec (AtomE k ds us e) =
+  AtomE k (map (subForm vec) ds) (map (subForm vec) us)
+  (subForm (V.map fromIntegral vec) e)
+    where
+      subForm vec d | value == 0 = d
+                    | otherwise = V.zipWith (+) (V.map (* value) vec) (d V.// [(v, 0)])
+                      where value = d V.! v
 
 integrate :: Num a => Expr a -> (Bool, Expr a)
 integrate (MulE e1 e2) = let (b1, e1') = integrate e1
