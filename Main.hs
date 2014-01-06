@@ -42,7 +42,7 @@ texify (Integral e v (l1, l2)) =
   "\\int\\limits_" ++ texifyLimit l1 ++ "^" ++ texifyLimit l2 ++ " "
   ++ texify e ++ " \\textrm{dx}_{" ++ show (v + 1) ++ "}"
     where
-      texifyLimit Infinity = "+\\infty"
+      texifyLimit Infinity = "{+\\infty}"
       texifyLimit Zero = "0"
       texifyLimit (Limit x) = show x
 
@@ -54,4 +54,4 @@ simpleExpr =
    (Atom 3 [] [V.fromList [0, 1, -1]] (V.fromList [1, 0, 2])))
   (Atom 1 [] [] (V.fromList [1, 0, 0]))
 
-main = putStrLn ("$$ " ++ texify simpleExpr ++ " $$")
+main = putStrLn ("$$ " ++ texify (Integral simpleExpr 1 (Zero, Infinity)) ++ " $$")
