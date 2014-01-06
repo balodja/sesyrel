@@ -43,4 +43,4 @@ simpleExpr =
    (Atom 3 [] [V.fromList [0, 1, -1]] (V.fromList [1, 0, 2])))
   (Atom 1 [] [] (V.fromList [1, 0, 0]))
 
-main = putStrLn ("$$ " ++ texify simpleExpr ++ " $$")
+main = putStrLn ("\\begin{dmath*} " ++ texify simpleExpr ++ " \\end{dmath*}")
