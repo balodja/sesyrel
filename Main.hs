@@ -87,14 +87,22 @@ normalizeOrder e = e
 normalize :: Expr a -> Expr a
 normalize = normalizeOrder . normalizeLists
 
+distributionLambda :: Num a => Int -> Int -> a -> Expr a
+distributionLambda length variable lambda =
+  Atom lambda [] [] (V.generate length (\i -> if i == variable then 1 else 0))
+
+distributionAnd :: Num a => Int -> Int -> Int -> Int -> Expr a
+distributionAnd length x a b =
+  Add
+  (Atom 1 [V.generate length (term x b)] [V.generate length (term b a)] zero)
+  (Atom 1 [V.generate length (term x a)] [V.generate length (term a b)] zero)
+    where
+      zero = V.replicate length 0
+      term p m i | i == p = 1
+                 | i == m = -1
+                 | otherwise = 0
+
 simpleExpr :: Expr Int
-simpleExpr = Integral integrant 1 (Limit (V.fromList [1, 0, 0]), Infinity)
-  where
-    integrant = 
-      Mul
-      (Add
-       (Atom 1 [V.fromList [1, 0, -1]] [V.fromList [-1, 1, 0]] (V.fromList [0, 0, 3]))
-       (Atom 3 [] [V.fromList [0, 1, -1]] (V.fromList [1, 0, 2])))
-      (Atom 1 [] [] (V.fromList [1, 0, 0]))
+simpleExpr = Mul (Mul (distributionAnd 3 2 0 1) (distributionLambda 3 0 15)) (distributionLambda 3 1 35)
 
 main = putStrLn ("$$ " ++ texify simpleExpr ++ " $$\n\n$$" ++ texify (normalize simpleExpr) ++ "$$")
