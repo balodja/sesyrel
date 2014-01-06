@@ -2,7 +2,8 @@
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import Data.List (intersperse)
+import Data.List (intersperse, nub)
+import Data.Maybe (fromJust)
 
 data Expr a = Add (Expr a) (Expr a)
             | Mul (Expr a) (Expr a)
@@ -85,8 +86,30 @@ normalizeOrder (Add e1@(Integral _ _ _) (Add e2@(Mul _ _) e3)) =
 normalizeOrder (Integral e v l) = Integral (normalizeOrder e) v l
 normalizeOrder e = e
 
-normalize :: Expr a -> Expr a
-normalize = normalizeOrder . normalizeLists
+normalizeDsAndUs :: Num a => Expr a -> Expr a
+normalizeDsAndUs (Mul e1 e2) = Mul (normalizeDsAndUs e1) (normalizeDsAndUs e2)
+normalizeDsAndUs (Add e1 e2) = Add (normalizeDsAndUs e1) (normalizeDsAndUs e2)
+normalizeDsAndUs (Integral e v l) = Integral (normalizeDsAndUs e) v l
+normalizeDsAndUs (Atom k ds us e) = Atom k (map swapDelta ds) (nub us) e
+  where
+    swapDelta d = if fromJust (V.find (/= 0) d) > 0 then d else V.map negate d
+
+normalize :: Num a => Expr a -> Expr a
+normalize = normalizeOrder . normalizeLists . normalizeDsAndUs
+
+groupify :: Num a => Expr a -> Expr a
+groupify = groupifyMulAtoms
+
+groupifyMulAtoms :: Num a => Expr a -> Expr a
+groupifyMulAtoms e@(Atom _ _ _ _) = e
+groupifyMulAtoms (Mul (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2)) =
+  Atom (k1 * k2) (d1 ++ d2) (u1 ++ u2) (V.zipWith (+) e1 e2)
+groupifyMulAtoms (Mul (Atom k1 d1 u1 e1) (Mul (Atom k2 d2 u2 e2) e)) =
+  groupifyMulAtoms $ Mul (Atom (k1 * k2) (d1 ++ d2) (u1 ++ u2) (V.zipWith (+) e1 e2)) e
+groupifyMulAtoms (Mul e1@(Atom _ _ _ _) e2) = Mul e1 (groupifyMulAtoms e2)
+groupifyMulAtoms (Mul e1 e2) = Mul (groupifyMulAtoms e1) (groupifyMulAtoms e2)
+groupifyMulAtoms (Add e1 e2) = Add (groupifyMulAtoms e1) (groupifyMulAtoms e2)
+groupifyMulAtoms (Integral e v l) = Integral (groupifyMulAtoms e) v l
 
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
@@ -106,4 +129,4 @@ distributionAnd length x a b =
 simpleExpr :: Expr Int
 simpleExpr = Mul (Mul (distributionAnd 3 2 0 1) (distributionLambda 3 0 15)) (distributionLambda 3 1 35)
 
-main = putStrLn ("$$ " ++ texify simpleExpr ++ " $$\n\n$$" ++ texify (normalize simpleExpr) ++ "$$")
+main = putStrLn ("$$ " ++ texify simpleExpr ++ " $$\n\n$$" ++ (texify . groupify . normalize $ simpleExpr) ++ "$$")
