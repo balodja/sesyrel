@@ -113,7 +113,7 @@ groupifyMulAtoms (Integral e v l) = Integral (groupifyMulAtoms e) v l
 
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
-  Atom lambda [] [] (V.generate length (\i -> if i == variable then 1 else 0))
+  Atom lambda [] [] (V.generate length (\i -> if i == variable then lambda else 0))
 
 distributionAnd :: Num a => Int -> Int -> Int -> Int -> Expr a
 distributionAnd length x a b =
