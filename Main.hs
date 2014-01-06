@@ -111,6 +111,19 @@ groupifyMulAtoms (Mul e1 e2) = Mul (groupifyMulAtoms e1) (groupifyMulAtoms e2)
 groupifyMulAtoms (Add e1 e2) = Add (groupifyMulAtoms e1) (groupifyMulAtoms e2)
 groupifyMulAtoms (Integral e v l) = Integral (groupifyMulAtoms e) v l
 
+substitute :: Num a => Int -> V.Vector Int -> Expr a -> Expr a
+substitute = undefined
+
+integrate :: Num a => Expr a -> (Bool, Expr a)
+integrate (Mul e1 e2) = let (b1, e1') = integrate e1
+                            (b2, e2') = integrate e2
+                        in (b1 || b2, Mul e1' e2')
+integrate (Add e1 e2) = let (b1, e1') = integrate e1
+                            (b2, e2') = integrate e2
+                        in (b1 || b2, Add e1' e2')
+integrate e@(Atom _ _ _ _) = (False, e)
+integrate (Integral e v ls@(l1, l2)) = undefined
+
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
   Atom lambda [] [] (V.generate length (\i -> if i == variable then lambda else 0))
