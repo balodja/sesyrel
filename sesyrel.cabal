@@ -1,0 +1,16 @@
+Name:			sesyrel
+Version:		0.1
+Description:		Just a test
+Author:			Vladimir Koroljov
+Maintainer:		balodja@gmail.com
+Build-Type:		Simple
+Cabal-Version:		>= 1.8
+
+--Library
+--  Hs-Source-Dirs:   lib
+--  Exposed-Modules:  Lib
+--  Build-Depends:	base >= 4, mtl >= 2, containers, vector
+
+Executable main
+  Main-is:		Main.hs
+  Build-Depends:	base >= 4, mtl >= 2, vector
