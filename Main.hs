@@ -31,7 +31,8 @@ texify (Atom k deltas units exponent)
         where
           texifyDelta d = "\\delta(" ++ texifyVarForm d ++ ")"
           texifyUnit u = "u(" ++ texifyVarForm u ++ ")"
-          texifyExponent e = "e^{" ++ texifyVarForm e ++ "}"
+          texifyExponent e = let vf = texifyVarForm e
+                             in if null vf then [] else "e^{" ++ vf ++ "}"
 texify (Integral e v (l1, l2)) =
   "\\int\\limits_" ++ texifyLimit l1 ++ "^" ++ texifyLimit l2 ++ " "
   ++ texify e ++ " \\textrm{dx}_{" ++ show (v + 1) ++ "}"
