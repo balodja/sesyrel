@@ -50,6 +50,43 @@ texifyVarForm = cutPlus . concat . zipWith texifyVar [1..] . V.toList
     cutPlus ('+' : s) = s
     cutPlus s = s
 
+normalizeLists :: Expr a -> Expr a
+normalizeLists (Mul e1@(Mul _ _) e2) =
+  case normalizeLists e1 of
+    Mul e11 e12 -> normalizeLists (Mul e11 (Mul e12 e2))
+    _ -> error "normalizeLists: strange error"
+normalizeLists (Add e1@(Add _ _) e2) =
+  case normalizeLists e1 of
+    Add e11 e12 -> normalizeLists (Add e11 (Add e12 e2))
+    _ -> error "normalizeLists: strange error"
+normalizeLists (Integral e v l) = Integral (normalizeLists e) v l
+normalizeLists e = e
+
+normalizeOrder :: Expr a -> Expr a
+normalizeOrder (Mul e1@(Add _ _) e2@(Atom _ _ _ _)) = Mul e2 e1
+normalizeOrder (Mul e1@(Add _ _) (Mul e2@(Atom _ _ _ _) e3)) =
+  Mul e2 (normalizeOrder (Mul e1 e3))
+normalizeOrder (Mul e1@(Integral _ _ _) e2@(Atom _ _ _ _)) = Mul e2 e1
+normalizeOrder (Mul e1@(Integral _ _ _) (Mul e2@(Atom _ _ _ _) e3)) =
+  Mul e2 (normalizeOrder (Mul e1 e3))
+normalizeOrder (Mul e1@(Integral _ _ _) e2@(Add _ _)) = Mul e2 e1
+normalizeOrder (Mul e1@(Integral _ _ _) (Mul e2@(Add _ _) e3)) =
+  Mul e2 (normalizeOrder (Mul e1 e3))
+normalizeOrder (Add e1@(Mul _ _) e2@(Atom _ _ _ _)) = Add e2 e1
+normalizeOrder (Add e1@(Mul _ _) (Add e2@(Atom _ _ _ _) e3)) =
+  Add e2 (normalizeOrder (Add e1 e3))
+normalizeOrder (Add e1@(Integral _ _ _) e2@(Atom _ _ _ _)) = Add e2 e1
+normalizeOrder (Add e1@(Integral _ _ _) (Add e2@(Atom _ _ _ _) e3)) =
+  Add e2 (normalizeOrder (Add e1 e3))
+normalizeOrder (Add e1@(Integral _ _ _) e2@(Mul _ _)) = Add e2 e1
+normalizeOrder (Add e1@(Integral _ _ _) (Add e2@(Mul _ _) e3)) =
+  Add e2 (normalizeOrder (Add e1 e3))
+normalizeOrder (Integral e v l) = Integral (normalizeOrder e) v l
+normalizeOrder e = e
+
+normalize :: Expr a -> Expr a
+normalize = normalizeOrder . normalizeLists
+
 simpleExpr :: Expr Int
 simpleExpr = Integral integrant 1 (Limit (V.fromList [1, 0, 0]), Infinity)
   where
@@ -60,4 +97,4 @@ simpleExpr = Integral integrant 1 (Limit (V.fromList [1, 0, 0]), Infinity)
        (Atom 3 [] [V.fromList [0, 1, -1]] (V.fromList [1, 0, 2])))
       (Atom 1 [] [] (V.fromList [1, 0, 0]))
 
-main = putStrLn ("$$ " ++ texify simpleExpr ++ " $$")
+main = putStrLn ("$$ " ++ texify simpleExpr ++ " $$\n\n$$" ++ texify (normalize simpleExpr) ++ "$$")
