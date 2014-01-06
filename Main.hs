@@ -42,7 +42,7 @@ texify (Integral e v (l1, l2)) =
   "\\int\\limits_" ++ texifyLimit l1 ++ "^" ++ texifyLimit l2 ++ " "
   ++ texify e ++ " \\textrm{dx}_{" ++ show (v + 1) ++ "}"
     where
-      texifyLimit Infinity = "\\infty"
+      texifyLimit Infinity = "+\\infty"
       texifyLimit Zero = "0"
       texifyLimit (Limit x) = show x
 
