@@ -143,15 +143,18 @@ integrateStep e@(AtomE _ _ _ _) = (False, e)
 integrateStep (IntE e v ls) = (True, integrate' e v ls)
 
 integrate' :: (Num a, Eq a) => Expr a -> Int -> (Limit, Limit) -> Expr a
-integrate' expr var ls = fromJust $ intEqualLimits <|> intDelta
+integrate' expr var ls = fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> intAdd <|> intMul <|> Just intExp
   where
     intEqualLimits | fst ls == snd ls = Just $ AtomE 0 [] [] Nothing
                    | otherwise = Nothing
-    intDelta = (\(vec, expr) -> MulE (calcLimitUnits var vec ls) (substitute var vec expr))
+    
+    intDelta = (\(d, expr) -> let vec = calcSubstitution d
+                              in MulE (calcLimitUnits var vec ls) (substitute var vec expr))
                <$> intFindDelta expr
+    
     intFindDelta (AtomE k ds us e) = case partition (\d -> (d V.! var) /= 0) ds of
       ([], rest) -> Nothing
-      (d : ds1, ds2) -> Just (calcSubstitution d, AtomE k (ds1 ++ ds2) us e)
+      (d : ds1, ds2) -> Just (d, AtomE k (ds1 ++ ds2) us e)
     intFindDelta (AddE _ _) = Nothing
     intFindDelta (MulE e1 e2) =
       case intFindDelta e1 of
@@ -160,6 +163,59 @@ integrate' expr var ls = fromJust $ intEqualLimits <|> intDelta
           Just (vec, e) -> Just (vec, MulE e1 e)
           Nothing -> Nothing
     intFindDelta (IntE _ _ _) = error "intFindDelta: integral? that should not happen"
+    
+    intUnit = intUnit' (snd ls) <$> intFindUnit expr
+    intUnit' (Limit higherLimit) (u, expr) | (u V.! var) > 0 = 
+      let vec = V.map negate (u V.// [(var, 0)])
+          lowerLimit = truncateLowerLimit (V.length u) (fst ls)
+      in AddE
+         (MulE
+          (AtomE 1 [] [V.zipWith (-) higherLimit vec, V.zipWith (-) vec lowerLimit] Nothing)
+          (IntE expr var (Limit vec, Limit higherLimit)))
+         (MulE
+          (AtomE 1 [] [V.zipWith (-) lowerLimit vec] Nothing)
+          (IntE expr var ls))
+                       | otherwise =
+      let vec = u V.// [(var, 0)]
+          lowerLimit = truncateLowerLimit (V.length u) (fst ls)
+      in AddE
+         (MulE
+          (AtomE 1 [] [V.zipWith (-) vec lowerLimit, V.zipWith (-) higherLimit vec] Nothing)
+          (IntE expr var (fst ls, Limit vec)))
+         (MulE
+          (AtomE 1 [] [V.zipWith (-) vec higherLimit] Nothing)
+          (IntE expr var ls))
+    intUnit' Infinity (u, expr) | (u V.! var) > 0 =
+      let vec = V.map negate (u V.// [(var, 0)])
+          lowerLimit = truncateLowerLimit (V.length u) (fst ls)
+      in AddE
+         (IntE expr var (Limit vec, Infinity))
+         (MulE
+          (AtomE 1 [] [V.zipWith (-) lowerLimit vec] Nothing)
+          (IntE expr var (fst ls, Limit vec)))
+                                | otherwise =
+      let vec = u V.// [(var, 0)]
+          lowerLimit = truncateLowerLimit (V.length u) (fst ls)
+      in MulE
+         (AtomE 1 [] [V.zipWith (-) vec lowerLimit] Nothing)
+         (IntE expr var (fst ls, Limit vec))
+    intUnit' Zero _ = error "intUnit': zero at higher limit? no-no-no"
+    
+    intFindUnit (AtomE k ds us e) = case partition (\u -> (u V.! var) /= 0) us of
+      ([], rest) -> Nothing
+      (u : us1, us2) -> Just (u, AtomE k ds (us1 ++ us2) e)
+    intFindUnit (AddE _ _) = Nothing
+    intFindUnit (MulE e1 e2) =
+      case intFindUnit e1 of
+        Just (vec, e) -> Just (vec, MulE e e2)
+        Nothing -> case intFindUnit e2 of
+          Just (vec, e) -> Just (vec, MulE e1 e)
+          Nothing -> Nothing
+    intFindUnit (IntE _ _ _) = error "intFindUnit: integral? that should not happen"
+    
+    intExp = undefined
+    intAdd = undefined
+    intMul = undefined
     
     calcSubstitution d | d V.! var > 0 = V.map negate (d V.// [(var, 0)])
                        | otherwise = d V.// [(var, 0)]
@@ -173,6 +229,11 @@ integrate' expr var ls = fromJust $ intEqualLimits <|> intDelta
         higher Zero = error "calcLimitUnits: higher zero limit? wut?"
         higher Infinity = []
         higher (Limit d) = [V.zipWith (-) d vec]
+    
+    truncateLowerLimit :: Int -> Limit -> V.Vector Int
+    truncateLowerLimit n Infinity = error "truncateLowerLimit: infinity? no wai"
+    truncateLowerLimit n Zero = V.replicate n 0
+    truncateLowerLimit n (Limit v) = v
 
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
