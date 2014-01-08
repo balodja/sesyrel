@@ -4,50 +4,77 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 
 import Data.List (intersperse, nub, partition)
-import Data.Maybe (fromJust, maybe)
-
-data Expr a = AddE (Expr a) (Expr a)
-            | MulE (Expr a) (Expr a)
-            | AtomE a [Vector Int] [Vector Int] (Maybe (Vector a))
-            | IntE (Expr a) Int (Limit, Limit)
-            deriving (Eq, Read, Show)
-
-data Limit = Zero
-           | Infinity
-           | Limit (Vector Int)
-           deriving (Eq, Read, Show)
+import Data.Maybe (fromJust)
+import Data.Either (partitionEithers)
 
 
--- some magic
+data Expr a = ExprC (Term a) (Expr a)
+            | ExprN (Term a)
+            deriving (Show, Read, Eq)
+
+data Term a = Term {
+    termAtom :: Atom a
+  , termExpr :: [Expr a]
+  } deriving (Show, Read, Eq)
+
+data Atom a = Atom a [Vector Int] [Vector Int] (Maybe (Vector a))
+              deriving (Show, Read, Eq)
+
+mapExpr :: (Term a -> Term a) -> Expr a -> Expr a
+mapExpr f (ExprC t e) = ExprC (f t) (mapExpr f e)
+mapExpr f (ExprN t) = ExprN (f t)
+
 zipAlt :: Alternative f => (a -> a -> a) -> f a -> f a -> f a
 zipAlt f a b = f <$> a <*> b <|> a <|> b
 
+zeroAtom :: Num a => Atom a
+zeroAtom = Atom 0 [] [] Nothing
+
+oneAtom :: Num a => Atom a
+oneAtom = Atom 1 [] [] Nothing
+
+toList :: Expr a -> [Term a]
+toList (ExprC t e) = t : toList e
+toList (ExprN t) = [t]
+
+fromList :: [Term a] -> Expr a
+fromList (t : []) = ExprN t
+fromList (t : ts) = ExprC t (fromList ts)
+fromList [] = error "fromList: term list is empty"
+
 texify :: (Show a, Num a, Ord a) => Expr a -> String
-texify (AddE e1 e2) = texify e1 ++ " + " ++ texify e2
-texify (MulE e1 e2) = texifyMul e1 ++ " " ++ texifyMul e2
-  where
-    texifyMul e@(AddE _ _) = "\\left( " ++ texify e ++ " \\right)"
-    texifyMul e = texify e
-texify (AtomE k deltas units exponent)
-  | null deltas && null units && maybe False V.null exponent = show k
+texify expr = let terms = texifyTerm <$> toList expr
+                  signs = fst <$> terms
+                  signStrs = (if head signs == '+' then "" else "-")
+                             : [ ' ' : s : " " | s <- tail signs ]
+              in concat $ zipWith (++) signStrs (snd <$> terms)
+
+texifyTerm :: (Num a, Ord a, Show a) => Term a -> (Char, String)
+texifyTerm (Term a es) = case texifyAtom a of
+  (sign, atom) -> (sign, atom ++ delimiter ++ exprs)
+    where
+      delimiter = if null atom || null exprs then "" else " "
+      exprs = concat . intersperse " " $ texifyAndParen <$> es
+      texifyAndParen e@(ExprC _ _) = "\\left( " ++ texify e ++ " \\right)"
+      texifyAndParen e@(ExprN _) = texify e
+
+texifyAtom :: (Num a, Ord a, Show a) => Atom a -> (Char, String)
+texifyAtom (Atom k deltas units exponent)
+  | null deltas && null units && maybe False V.null exponent = (sign, show absK)
   | otherwise =
-    (if k == 1 then [] else show k)
+    (,) sign $
+    (if absK == 1 then [] else show absK)
       ++ (concat . intersperse " " . map texifyDelta $ deltas)
       ++ (concat . intersperse " " . map texifyUnit $ units)
-      ++ texifyExponent (fmap (V.map negate) exponent)
+      ++ texifyExponent ((V.map negate) <$> exponent)
         where
+          absK = abs k
+          sign = if signum k == 1 then '+' else '-'
           texifyDelta d = "\\delta(" ++ texifyVarForm d ++ ")"
           texifyUnit u = "u(" ++ texifyVarForm u ++ ")"
           texifyExponent Nothing = []
           texifyExponent (Just e) = let vf = texifyVarForm e
                                     in if null vf then [] else "e^{" ++ vf ++ "}"
-texify (IntE e v (l1, l2)) =
-  "\\int\\limits_" ++ texifyLimit l1 ++ "^" ++ texifyLimit l2 ++ " "
-  ++ texify e ++ " \\textrm{dx}_{" ++ show (v + 1) ++ "}"
-    where
-      texifyLimit Infinity = "{+\\infty}"
-      texifyLimit Zero = "0"
-      texifyLimit (Limit x) = "{" ++ texifyVarForm x ++ "}"
 
 texifyVarForm :: (Show a, Num a, Ord a) => Vector a -> String
 texifyVarForm = cutPlus . concat . zipWith texifyVar [1..] . V.toList
@@ -59,72 +86,26 @@ texifyVarForm = cutPlus . concat . zipWith texifyVar [1..] . V.toList
     cutPlus ('+' : s) = s
     cutPlus s = s
 
-normalizeLists :: Expr a -> Expr a
-normalizeLists (MulE e1@(MulE _ _) e2) =
-  case normalizeLists e1 of
-    MulE e11 e12 -> normalizeLists (MulE e11 (MulE e12 e2))
-    _ -> error "normalizeLists: strange error"
-normalizeLists (AddE e1@(AddE _ _) e2) =
-  case normalizeLists e1 of
-    AddE e11 e12 -> normalizeLists (AddE e11 (AddE e12 e2))
-    _ -> error "normalizeLists: strange error"
-normalizeLists (IntE e v l) = IntE (normalizeLists e) v l
-normalizeLists e = e
+normalizeDsUs :: Num a => Expr a -> Expr a
+normalizeDsUs = mapExpr normalizeDsUsTerm
 
-normalizeOrder :: Expr a -> Expr a
-normalizeOrder (MulE e1@(AddE _ _) e2@(AtomE _ _ _ _)) = MulE e2 e1
-normalizeOrder (MulE e1@(AddE _ _) (MulE e2@(AtomE _ _ _ _) e3)) =
-  MulE e2 (normalizeOrder (MulE e1 e3))
-normalizeOrder (MulE e1@(IntE _ _ _) e2@(AtomE _ _ _ _)) = MulE e2 e1
-normalizeOrder (MulE e1@(IntE _ _ _) (MulE e2@(AtomE _ _ _ _) e3)) =
-  MulE e2 (normalizeOrder (MulE e1 e3))
-normalizeOrder (MulE e1@(IntE _ _ _) e2@(AddE _ _)) = MulE e2 e1
-normalizeOrder (MulE e1@(IntE _ _ _) (MulE e2@(AddE _ _) e3)) =
-  MulE e2 (normalizeOrder (MulE e1 e3))
-normalizeOrder (AddE e1@(MulE _ _) e2@(AtomE _ _ _ _)) = AddE e2 e1
-normalizeOrder (AddE e1@(MulE _ _) (AddE e2@(AtomE _ _ _ _) e3)) =
-  AddE e2 (normalizeOrder (AddE e1 e3))
-normalizeOrder (AddE e1@(IntE _ _ _) e2@(AtomE _ _ _ _)) = AddE e2 e1
-normalizeOrder (AddE e1@(IntE _ _ _) (AddE e2@(AtomE _ _ _ _) e3)) =
-  AddE e2 (normalizeOrder (AddE e1 e3))
-normalizeOrder (AddE e1@(IntE _ _ _) e2@(MulE _ _)) = AddE e2 e1
-normalizeOrder (AddE e1@(IntE _ _ _) (AddE e2@(MulE _ _) e3)) =
-  AddE e2 (normalizeOrder (AddE e1 e3))
-normalizeOrder (IntE e v l) = IntE (normalizeOrder e) v l
-normalizeOrder e = e
+normalizeDsUsTerm :: Num a => Term a -> Term a
+normalizeDsUsTerm (Term a es) = Term (normalizeDsUsAtom a) (normalizeDsUs <$> es)
 
-normalizeDsAndUs :: Num a => Expr a -> Expr a
-normalizeDsAndUs (MulE e1 e2) = MulE (normalizeDsAndUs e1) (normalizeDsAndUs e2)
-normalizeDsAndUs (AddE e1 e2) = AddE (normalizeDsAndUs e1) (normalizeDsAndUs e2)
-normalizeDsAndUs (IntE e v l) = IntE (normalizeDsAndUs e) v l
-normalizeDsAndUs (AtomE k ds us e) = AtomE k (map swapDelta ds) (nub us) e
+normalizeDsUsAtom :: Num a => Atom a -> Atom a
+normalizeDsUsAtom (Atom k ds us e) = Atom k (map swapDelta ds) (nub us) e
   where
     swapDelta d = if fromJust (V.find (/= 0) d) > 0 then d else V.map negate d
 
-normalize :: Num a => Expr a -> Expr a
-normalize = normalizeOrder . normalizeLists . normalizeDsAndUs
-
-groupify :: Num a => Expr a -> Expr a
-groupify = groupifyMulAtoms
-
-groupifyMulAtoms :: Num a => Expr a -> Expr a
-groupifyMulAtoms e@(AtomE _ _ _ _) = e
-groupifyMulAtoms (MulE (AtomE k1 d1 u1 e1) (AtomE k2 d2 u2 e2)) =
-  AtomE (k1 * k2) (d1 ++ d2) (u1 ++ u2) (zipAlt (V.zipWith (+)) e1 e2)
-groupifyMulAtoms (MulE (AtomE k1 d1 u1 e1) (MulE (AtomE k2 d2 u2 e2) e)) =
-  groupifyMulAtoms $
-  MulE (AtomE (k1 * k2) (d1 ++ d2) (u1 ++ u2) (zipAlt (V.zipWith (+)) e1 e2)) e
-groupifyMulAtoms (MulE e1@(AtomE _ _ _ _) e2) = MulE e1 (groupifyMulAtoms e2)
-groupifyMulAtoms (MulE e1 e2) = MulE (groupifyMulAtoms e1) (groupifyMulAtoms e2)
-groupifyMulAtoms (AddE e1 e2) = AddE (groupifyMulAtoms e1) (groupifyMulAtoms e2)
-groupifyMulAtoms (IntE e v l) = IntE (groupifyMulAtoms e) v l
-
 substitute :: (Num a, Eq a) => Int -> V.Vector Int -> Expr a -> Expr a
-substitute v vec (MulE e1 e2) = MulE (substitute v vec e1) (substitute v vec e2)
-substitute v vec (AddE e1 e2) = AddE (substitute v vec e1) (substitute v vec e2)
-substitute v vec (IntE _ _ _) = error "substitute: integral? that should not happen"
-substitute v vec (AtomE k ds us e) =
-  AtomE k (map (substituteForm v vec) ds) (map (substituteForm v vec) us)
+substitute v vec = mapExpr (substituteTerm v vec)
+
+substituteTerm :: (Num a, Eq a) => Int -> V.Vector Int -> Term a -> Term a
+substituteTerm v vec (Term a es) = Term (substituteAtom v vec a) (substitute v vec <$> es)
+
+substituteAtom :: (Num a, Eq a) => Int -> V.Vector Int -> Atom a -> Atom a
+substituteAtom v vec (Atom k ds us e) =
+  Atom k (map (substituteForm v vec) ds) (map (substituteForm v vec) us)
   (fmap (substituteForm v . V.map fromIntegral $ vec) e)
 
 substituteForm :: (Num a, Eq a) => Int -> Vector a -> Vector a -> Vector a
@@ -132,125 +113,144 @@ substituteForm v vec d | value == 0 = d
                        | otherwise = V.zipWith (+) (V.map (* value) vec) (d V.// [(v, 0)])
                          where value = d V.! v
 
-integrateStep :: (Num a, Eq a) => Expr a -> (Bool, Expr a)
-integrateStep (MulE e1 e2) = let (b1, e1') = integrateStep e1
-                                 (b2, e2') = integrateStep e2
-                             in (b1 || b2, MulE e1' e2')
-integrateStep (AddE e1 e2) = let (b1, e1') = integrateStep e1
-                                 (b2, e2') = integrateStep e2
-                             in (b1 || b2, AddE e1' e2')
-integrateStep e@(AtomE _ _ _ _) = (False, e)
-integrateStep (IntE e v ls) = (True, integrate' e v ls)
-
-integrate' :: (Num a, Eq a) => Expr a -> Int -> (Limit, Limit) -> Expr a
-integrate' expr var ls = fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> intAdd <|> intMul <|> Just intExp
+deepExpand :: Num a => Expr a -> Expr a
+deepExpand e | isExpandable e = deepExpand (expand e)
+             | otherwise = e
   where
-    intEqualLimits | fst ls == snd ls = Just $ AtomE 0 [] [] Nothing
-                   | otherwise = Nothing
-    
-    intDelta = (\(d, expr) -> let vec = calcSubstitution d
-                              in MulE (calcLimitUnits var vec ls) (substitute var vec expr))
-               <$> intFindDelta expr
-    
-    intFindDelta (AtomE k ds us e) = case partition (\d -> (d V.! var) /= 0) ds of
-      ([], rest) -> Nothing
-      (d : ds1, ds2) -> Just (d, AtomE k (ds1 ++ ds2) us e)
-    intFindDelta (AddE _ _) = Nothing
-    intFindDelta (MulE e1 e2) =
-      case intFindDelta e1 of
-        Just (vec, e) -> Just (vec, MulE e e2)
-        Nothing -> case intFindDelta e2 of
-          Just (vec, e) -> Just (vec, MulE e1 e)
-          Nothing -> Nothing
-    intFindDelta (IntE _ _ _) = error "intFindDelta: integral? that should not happen"
-    
-    intUnit = intUnit' (snd ls) <$> intFindUnit expr
-    intUnit' (Limit higherLimit) (u, expr) | (u V.! var) > 0 = 
-      let vec = V.map negate (u V.// [(var, 0)])
-          lowerLimit = truncateLowerLimit (V.length u) (fst ls)
-      in AddE
-         (MulE
-          (AtomE 1 [] [V.zipWith (-) higherLimit vec, V.zipWith (-) vec lowerLimit] Nothing)
-          (IntE expr var (Limit vec, Limit higherLimit)))
-         (MulE
-          (AtomE 1 [] [V.zipWith (-) lowerLimit vec] Nothing)
-          (IntE expr var ls))
-                       | otherwise =
-      let vec = u V.// [(var, 0)]
-          lowerLimit = truncateLowerLimit (V.length u) (fst ls)
-      in AddE
-         (MulE
-          (AtomE 1 [] [V.zipWith (-) vec lowerLimit, V.zipWith (-) higherLimit vec] Nothing)
-          (IntE expr var (fst ls, Limit vec)))
-         (MulE
-          (AtomE 1 [] [V.zipWith (-) vec higherLimit] Nothing)
-          (IntE expr var ls))
-    intUnit' Infinity (u, expr) | (u V.! var) > 0 =
-      let vec = V.map negate (u V.// [(var, 0)])
-          lowerLimit = truncateLowerLimit (V.length u) (fst ls)
-      in AddE
-         (IntE expr var (Limit vec, Infinity))
-         (MulE
-          (AtomE 1 [] [V.zipWith (-) lowerLimit vec] Nothing)
-          (IntE expr var (fst ls, Limit vec)))
-                                | otherwise =
-      let vec = u V.// [(var, 0)]
-          lowerLimit = truncateLowerLimit (V.length u) (fst ls)
-      in MulE
-         (AtomE 1 [] [V.zipWith (-) vec lowerLimit] Nothing)
-         (IntE expr var (fst ls, Limit vec))
-    intUnit' Zero _ = error "intUnit': zero at higher limit? no-no-no"
-    
-    intFindUnit (AtomE k ds us e) = case partition (\u -> (u V.! var) /= 0) us of
-      ([], rest) -> Nothing
-      (u : us1, us2) -> Just (u, AtomE k ds (us1 ++ us2) e)
-    intFindUnit (AddE _ _) = Nothing
-    intFindUnit (MulE e1 e2) =
-      case intFindUnit e1 of
-        Just (vec, e) -> Just (vec, MulE e e2)
-        Nothing -> case intFindUnit e2 of
-          Just (vec, e) -> Just (vec, MulE e1 e)
-          Nothing -> Nothing
-    intFindUnit (IntE _ _ _) = error "intFindUnit: integral? that should not happen"
-    
-    intExp = undefined
-    intAdd = undefined
-    intMul = undefined
-    
-    calcSubstitution d | d V.! var > 0 = V.map negate (d V.// [(var, 0)])
-                       | otherwise = d V.// [(var, 0)]
-    
-    calcLimitUnits :: (Num a, Eq a) => Int -> V.Vector Int -> (Limit, Limit) -> Expr a
-    calcLimitUnits var vec (l1, l2) = AtomE 1 [] (lower l1 : higher l2) Nothing
-      where
-        lower Zero = vec
-        lower Infinity = error "calcLimitUnits: lower infinite limit? wut?"
-        lower (Limit d) = V.zipWith (-) vec d
-        higher Zero = error "calcLimitUnits: higher zero limit? wut?"
-        higher Infinity = []
-        higher (Limit d) = [V.zipWith (-) d vec]
-    
-    truncateLowerLimit :: Int -> Limit -> V.Vector Int
-    truncateLowerLimit n Infinity = error "truncateLowerLimit: infinity? no wai"
-    truncateLowerLimit n Zero = V.replicate n 0
-    truncateLowerLimit n (Limit v) = v
+    isExpandable = any isExpandableTerm . toList
+    isExpandableTerm (Term _ []) = False
+    isExpandableTerm _ = True
+
+expand :: Num a => Expr a -> Expr a
+expand = fromList . concatMap (toList . expandTerm) . toList
+
+expandTerm :: Num a => Term a -> Expr a
+expandTerm (Term a []) = ExprN $ Term a []
+expandTerm (Term a es) =
+  fromList . map (foldl productTerm (Term a [])) . sequence $ toList <$> es
+
+product :: Num a => Expr a -> Expr a -> Expr a
+product e1 e2 = ExprN (Term oneAtom [e1, e2])
+
+productTerm :: Num a => Term a -> Term a -> Term a
+productTerm (Term a1 e1) (Term a2 e2) = Term (productAtom a1 a2) (e1 ++ e2)
+
+productAtom :: Num a => Atom a -> Atom a -> Atom a
+productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
+  normalizeDsUsAtom $ Atom (k1 * k2) (d1 ++ d2) (u1 ++ u2) (zipAlt (V.zipWith (+)) e1 e2)
 
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
-  AtomE lambda [] [] (Just $ V.generate length (\i -> if i == variable then lambda else 0))
+  let exp = Just $ V.generate length (\i -> if i == variable then lambda else 0)
+  in ExprN $ Term (Atom lambda [] [] exp) []
 
 distributionAnd :: Num a => Int -> Int -> Int -> Int -> Expr a
 distributionAnd length x a b =
-  AddE
-  (AtomE 1 [V.generate length (term x b)] [V.generate length (term b a)] Nothing)
-  (AtomE 1 [V.generate length (term x a)] [V.generate length (term a b)] Nothing)
-    where
-      zero = V.replicate length 0
+  let zero = V.replicate length 0
       term p m i | i == p = 1
                  | i == m = -1
                  | otherwise = 0
+      a1 = Atom 1 [V.generate length (term x b)] [V.generate length (term b a)] Nothing
+      a2 = Atom 1 [V.generate length (term x a)] [V.generate length (term a b)] Nothing
+  in ExprC (Term a1 []) (ExprN (Term a2 []))
 
-simpleExpr :: Expr Int
-simpleExpr = MulE (MulE (distributionAnd 3 2 0 1) (distributionLambda 3 0 15)) (distributionLambda 3 1 35)
+data Limit = Zero
+           | Infinity
+           | Limit (Vector Int)
+           deriving (Eq, Read, Show)
 
-main = putStrLn ("$$ " ++ texify simpleExpr ++ " $$\n\n$$" ++ (texify . groupify . normalize $ simpleExpr) ++ "$$")
+integrate :: (Fractional a, Eq a) => Expr a -> Int -> Limit -> Limit -> Expr a
+integrate expr var lo hi =
+  let doTerm (Term a _) = integrateAtom a var lo hi
+      filterAtoms = filter (\(Atom k _ _ _) -> k /= 0)
+  in fromList . map (`Term` []) . filterAtoms . map cancelUsAtom . concatMap doTerm . toList . deepExpand $ expr
+
+integrateAtom :: (Fractional a, Eq a) => Atom a -> Int -> Limit -> Limit -> [Atom a]
+integrateAtom (Atom k ds us (Just exp)) var lo hi =
+  fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> Just intExp
+    where
+      intEqualLimits | lo == hi = Just $ [Atom 0 [] [] Nothing]
+                     | otherwise = Nothing
+      
+      intDelta = case partition (\d -> (d V.! var) /= 0) ds of
+        ([], rest) -> Nothing
+        (d : ds1, ds2) ->
+          let vec = calcSubstitution d
+              us1 = calcDeltaUnits vec
+          in Just [substituteAtom var vec (Atom k (ds1 ++ ds2) (us1 ++ us) (Just exp))]
+
+      calcSubstitution d | d V.! var > 0 = V.map negate (d V.// [(var, 0)])
+                         | otherwise = d V.// [(var, 0)]
+
+      calcDeltaUnits vec = lower lo : higher hi
+        where
+          lower Zero = vec
+          lower Infinity = error "integrateAtom: lower infinite limit? wut?"
+          lower (Limit l) = V.zipWith (-) vec l
+          higher Zero = error "integrateAtom: higher zero limit? wut?"
+          higher Infinity = []
+          higher (Limit l) = [V.zipWith (-) l vec]
+
+      intExp = let lambda = exp V.! var
+                   subLimit a Infinity = zeroAtom
+                   subLimit a Zero = substituteAtom var zeroVector a
+                   subLimit a (Limit l) = substituteAtom var l a
+               in [ subLimit (Atom (-k / lambda) ds us (Just exp)) hi
+                  , subLimit (Atom (k / lambda) ds us (Just exp)) lo
+                  ]
+      
+      zeroVector = V.replicate (V.length exp) 0
+
+      intUnit = intUnit' <$> findUnit
+      intUnit' (u, us) | (u V.! var) > 0 =
+        let vec = V.map negate (u V.// [(var, 0)])
+        in case hi of
+          Infinity ->
+            let u1 = V.zipWith (-) lowerLimit vec
+            in integrateAtom (Atom k ds us (Just exp)) var (Limit vec) Infinity
+               ++ integrateAtom (Atom k ds (u1 : us) (Just exp)) var lo (Limit vec)
+          Limit higherLimit ->
+            let u1 = V.zipWith (-) higherLimit vec
+                u2 = V.zipWith (-) vec lowerLimit
+                u3 = V.zipWith (-) lowerLimit vec
+            in integrateAtom (Atom k ds (u1 : u2 : us) (Just exp)) var (Limit vec) hi
+               ++ integrateAtom (Atom k ds (u3 : us) (Just exp)) var lo hi
+          Zero -> error "integrateAtom: zero at higher limit? no wai"
+                       | otherwise =
+        let vec = u V.// [(var, 0)]
+        in case hi of
+          Infinity ->
+            let u1 = V.zipWith (-) vec lowerLimit
+            in integrateAtom (Atom k ds (u1 : us) (Just exp)) var lo (Limit vec)
+          Limit higherLimit ->
+            let u1 = V.zipWith (-) vec lowerLimit
+                u2 = V.zipWith (-) higherLimit vec
+                u3 = V.zipWith (-) vec higherLimit
+            in integrateAtom (Atom k ds (u1 : u2 : us) (Just exp)) var lo (Limit vec)
+               ++ integrateAtom (Atom k ds (u3 : us) (Just exp)) var lo hi
+          Zero -> error "integrateAtom: zero at higher limit? no wai"
+      
+      findUnit = case partition (\u -> (u V.! var) /= 0) us of
+        ([], rest) -> Nothing
+        (u : us1, us2) -> Just (u, us1 ++ us2)
+        
+      lowerLimit = case lo of
+        Infinity -> error "integrateAtom: infinity at lower limit? wut?"
+        Limit l -> l
+        Zero -> zeroVector
+
+cancelUsAtom :: Fractional a => Atom a -> Atom a
+cancelUsAtom (Atom k ds us exp) =
+  case partitionEithers . map separate . nub $ us of
+    (ks, us) -> Atom (k * Prelude.product ks) ds us exp
+    where
+      separate u | V.all (== 0) u = Left (1/2)
+                 | V.all (>= 0) u = Left 1
+                 | V.all (<= 0) u = Left 0
+                 | otherwise = Right u
+
+simpleExpr :: Expr Double
+simpleExpr = ExprN $ Term oneAtom [distributionAnd 3 2 0 1, distributionLambda 3 0 15, distributionLambda 3 1 35]
+
+main :: IO ()
+main = putStrLn . (\t -> "$$ " ++ t ++ " $$") . texify $ integrate (integrate simpleExpr 0 Zero Infinity) 1 Zero Infinity
