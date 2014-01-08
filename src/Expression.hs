@@ -70,7 +70,7 @@ texifyAtom (Atom k deltas units exponent)
           absK = abs k
           sign = if signum k == 1 then '+' else '-'
           texifyDelta d = "\\delta(" ++ texifyVarForm d ++ ")"
-          texifyUnit u = "u(" ++ texifyVarForm u ++ ")"
+          texifyUnit u = "\\theta(" ++ texifyVarForm u ++ ")"
           texifyExponent Nothing = []
           texifyExponent (Just e) = let vf = texifyVarForm e
                                     in if null vf then [] else "e^{" ++ vf ++ "}"
@@ -151,8 +151,8 @@ distributionAnd length x a b =
                  | i == m = -1
                  | otherwise = 0
       single a b = S.singleton $ V.generate length (term a b)
-      a1 = Atom 1 (single x b) (single b a) Nothing
-      a2 = Atom 1 (single x a) (single a b) Nothing
+      a1 = normalizeDsAtom $ Atom 1 (single x b) (single b a) Nothing
+      a2 = normalizeDsAtom $ Atom 1 (single x a) (single a b) Nothing
   in ExprC (Term a1 []) (ExprN (Term a2 []))
 
 data Limit = Zero
