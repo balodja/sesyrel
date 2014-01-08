@@ -1,3 +1,5 @@
+module Expression where
+
 import Control.Applicative
 
 import Data.Vector (Vector)
@@ -261,9 +263,3 @@ groupifyAtoms (a : as) = case partition (a `similar`) as of
     similar (Atom _ ds1 us1 e1) (Atom _ ds2 us2 e2) =
       (e1 == e2) && (ds1 `equal` ds2) && (us1 `equal` us2)    
     equal a b = sort a == sort b
-
-simpleExpr :: Expr Double
-simpleExpr = ExprN $ Term oneAtom [distributionAnd 3 2 0 1, distributionLambda 3 0 15, distributionLambda 3 1 35]
-
-main :: IO ()
-main = putStrLn . (\t -> "$$ " ++ t ++ " $$") . texify $ integrate (integrate simpleExpr 0 Zero Infinity) 1 Zero Infinity
