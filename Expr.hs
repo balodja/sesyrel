@@ -12,7 +12,7 @@ data Expr a = ExprC (Term a) (Expr a)
             deriving (Show, Read, Eq)
 
 data Term a = Term {
-    termAtom :: (Atom a)
+    termAtom :: Atom a
   , termExpr :: [Expr a]
   } deriving (Show, Read, Eq)
 
@@ -161,6 +161,11 @@ data Limit = Zero
            | Limit (Vector Int)
            deriving (Eq, Read, Show)
 
+integrate :: (Fractional a, Eq a) => Expr a -> Int -> Limit -> Limit -> Expr a
+integrate expr var lo hi =
+  let doTerm (Term a _) = integrateAtom a var lo hi
+  in fromList . map (`Term` []) . concatMap doTerm . toList . deepExpand $ expr
+
 integrateAtom :: (Fractional a, Eq a) => Atom a -> Int -> Limit -> Limit -> [Atom a]
 integrateAtom (Atom k ds us (Just exp)) var lo hi =
   fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> Just intExp
@@ -181,9 +186,9 @@ integrateAtom (Atom k ds us (Just exp)) var lo hi =
       calcDeltaUnits vec = lower lo : higher hi
         where
           lower Zero = vec
-          lower Infinity = error "calcLimitUnits: lower infinite limit? wut?"
+          lower Infinity = error "integrateAtom: lower infinite limit? wut?"
           lower (Limit l) = V.zipWith (-) vec l
-          higher Zero = error "calcLimitUnits: higher zero limit? wut?"
+          higher Zero = error "integrateAtom: higher zero limit? wut?"
           higher Infinity = []
           higher (Limit l) = [V.zipWith (-) l vec]
 
