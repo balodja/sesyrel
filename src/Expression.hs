@@ -164,7 +164,10 @@ integrate :: (Fractional a, Eq a) => Expr a -> Int -> Limit -> Limit -> Expr a
 integrate expr var lo hi =
   let doTerm (Term a _) = integrateAtom a var lo hi
       filterAtoms = filter (\(Atom k _ _ _) -> k /= 0)
-  in fromList . map (`Term` []) . groupifyAtoms . filterAtoms . map cancelUsAtom . concatMap doTerm . toList . deepExpand $ expr
+  in fromList . map (`Term` [])
+     . groupifyAtoms . filterAtoms
+     . map cancelUsAtom . concatMap doTerm
+     . toList . deepExpand $ expr
 
 integrateAtom :: (Fractional a, Eq a) => Atom a -> Int -> Limit -> Limit -> [Atom a]
 integrateAtom (Atom k ds us (Just exp)) var lo hi =
