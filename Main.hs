@@ -3,7 +3,7 @@ import Control.Applicative
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import Data.List (intersperse, nub, partition)
+import Data.List (intersperse, nub, partition, sort)
 import Data.Maybe (fromJust)
 import Data.Either (partitionEithers)
 
@@ -163,7 +163,7 @@ integrate :: (Fractional a, Eq a) => Expr a -> Int -> Limit -> Limit -> Expr a
 integrate expr var lo hi =
   let doTerm (Term a _) = integrateAtom a var lo hi
       filterAtoms = filter (\(Atom k _ _ _) -> k /= 0)
-  in fromList . map (`Term` []) . filterAtoms . map cancelUsAtom . concatMap doTerm . toList . deepExpand $ expr
+  in fromList . map (`Term` []) . groupifyAtoms . filterAtoms . map cancelUsAtom . concatMap doTerm . toList . deepExpand $ expr
 
 integrateAtom :: (Fractional a, Eq a) => Atom a -> Int -> Limit -> Limit -> [Atom a]
 integrateAtom (Atom k ds us (Just exp)) var lo hi =
@@ -248,6 +248,19 @@ cancelUsAtom (Atom k ds us exp) =
                  | V.all (>= 0) u = Left 1
                  | V.all (<= 0) u = Left 0
                  | otherwise = Right u
+
+groupifyAtoms :: (Eq a, Num a) => [Atom a] -> [Atom a]
+groupifyAtoms [] = []
+groupifyAtoms (a : as) = case partition (a `similar`) as of
+  ([], rest) -> a : groupifyAtoms rest
+  (found, rest) -> let Atom k0 ds us exp = a
+                       getK (Atom k _ _ _) = k
+                       a' = Atom (k0 + sum (map getK found)) ds us exp
+                   in a' : groupifyAtoms rest
+  where
+    similar (Atom _ ds1 us1 e1) (Atom _ ds2 us2 e2) =
+      (e1 == e2) && (ds1 `equal` ds2) && (us1 `equal` us2)    
+    equal a b = sort a == sort b
 
 simpleExpr :: Expr Double
 simpleExpr = ExprN $ Term oneAtom [distributionAnd 3 2 0 1, distributionLambda 3 0 15, distributionLambda 3 1 35]
