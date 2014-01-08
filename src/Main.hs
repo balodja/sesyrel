@@ -18,7 +18,7 @@ data FaultTree = FaultTree {
   , faultTreeFactors :: [Factor]
   } deriving (Show, Read, Eq)
 
-type Factor = (Expr Double, [Int])
+type Factor = (Expr Rational, [Int])
 
 evalFaultTreeM :: FaultTreeM a -> (a, FaultTree)
 evalFaultTreeM a = (\(x, s, _) -> (x, s)) $
@@ -39,7 +39,7 @@ addFactorM :: Factor -> FaultTreeM ()
 addFactorM factor = modify $ \fts ->
   fts { faultTreeFactors = factor : faultTreeFactors fts }
 
-faultTreeLambdaM :: Double -> FaultTreeM Int
+faultTreeLambdaM :: Rational -> FaultTreeM Int
 faultTreeLambdaM lambda = do
   var <- newVariableM
   vars <- ask
@@ -47,7 +47,7 @@ faultTreeLambdaM lambda = do
   addFactorM (expr, [var])
   return var
 
-distributionTwoM :: (Int -> Int -> Int -> Int -> Expr Double) ->
+distributionTwoM :: (Int -> Int -> Int -> Int -> Expr Rational) ->
                     Int -> Int -> FaultTreeM Int
 distributionTwoM distr x y = do
   var <- newVariableM
@@ -74,7 +74,7 @@ tellFactors factors = do
   forM_ factors $
     \(expr, _) -> tell ["\\begin{dmath*} " ++ texify expr ++ "\\end{dmath*}", ""]
 
-faultTreeIntegrate :: FaultTree -> (Expr Double, [String])
+faultTreeIntegrate :: FaultTree -> (Expr Rational, [String])
 faultTreeIntegrate (FaultTree vars factors) = runWriter $ go factors 0
   where
   go fs i = if i < vars - 1

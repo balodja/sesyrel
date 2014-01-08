@@ -8,6 +8,7 @@ import qualified Data.Vector as V
 import Data.List (intersperse, partition)
 import Data.Maybe (fromJust)
 import Data.Either (partitionEithers)
+import Data.Ratio (Ratio, numerator, denominator)
 
 import Data.Set (Set)
 import qualified Data.Set as S
@@ -41,14 +42,33 @@ fromList [] = error "fromList: term list is empty"
 mapExpr :: (Term a -> Term a) -> Expr a -> Expr a
 mapExpr f = fromList . map f . toList
 
-texify :: (Show a, Num a, Ord a) => Expr a -> String
-texify expr = let terms = texifyTerm <$> toList expr
-                  signs = fst <$> terms
-                  signStrs = (if head signs == '+' then "" else "-")
-                             : [ ' ' : s : " " | s <- tail signs ]
-              in concat $ zipWith (++) signStrs (snd <$> terms)
+class Texifiable a where
+  texify :: a -> String
 
-texifyTerm :: (Num a, Ord a, Show a) => Term a -> (Char, String)
+instance Texifiable Integer where
+  texify = show
+
+instance Texifiable Int where
+  texify = show
+
+instance Texifiable Double where
+  texify = show
+
+instance (Integral a, Texifiable a) => Texifiable (Ratio a) where
+  texify z = let y = denominator z
+                 x = numerator z
+             in if y == 1 then texify x
+                else "\\frac{" ++ texify x ++ "}{" ++ texify y ++ "}"
+
+instance (Num a, Ord a, Texifiable a) => Texifiable (Expr a) where
+  texify expr = let terms = texifyTerm <$> toList expr
+                    signs = fst <$> terms
+                    signStrs = (if head signs == '+' then "" else "-")
+                               : [ ' ' : s : " " | s <- tail signs ]
+                in concat $ zipWith (++) signStrs (snd <$> terms)
+
+
+texifyTerm :: (Num a, Ord a, Texifiable a) => Term a -> (Char, String)
 texifyTerm (Term a es) = case texifyAtom a of
   (sign, atom) -> (sign, atom ++ delimiter ++ exprs)
     where
@@ -57,12 +77,12 @@ texifyTerm (Term a es) = case texifyAtom a of
       texifyAndParen e@(ExprC _ _) = "\\left( " ++ texify e ++ " \\right)"
       texifyAndParen e@(ExprN _) = texify e
 
-texifyAtom :: (Num a, Ord a, Show a) => Atom a -> (Char, String)
+texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, String)
 texifyAtom (Atom k deltas units exponent)
-  | S.null deltas && S.null units && maybe False V.null exponent = (sign, show absK)
+  | S.null deltas && S.null units && maybe False V.null exponent = (sign, texify absK)
   | otherwise =
     (,) sign $
-    (if absK == 1 then [] else show absK)
+    (if absK == 1 then [] else texify absK)
       ++ (concat . intersperse " " . map texifyDelta . S.toList $ deltas)
       ++ (concat . intersperse " " . map texifyUnit . S.toList $ units)
       ++ texifyExponent ((V.map negate) <$> exponent)
@@ -75,13 +95,13 @@ texifyAtom (Atom k deltas units exponent)
           texifyExponent (Just e) = let vf = texifyVarForm e
                                     in if null vf then [] else "e^{" ++ vf ++ "}"
 
-texifyVarForm :: (Show a, Num a, Ord a) => Vector a -> String
+texifyVarForm :: (Num a, Ord a, Texifiable a) => Vector a -> String
 texifyVarForm = cutPlus . concat . zipWith texifyVar [1..] . V.toList
   where
     texifyVar n v | v == 0 = ""
                   | otherwise = sign v : (showNum v ++ "x_{" ++ show n ++ "}")
     sign v = if v > 0 then '+' else '-'
-    showNum x = let ax = abs x in if ax == 1 then [] else show ax
+    showNum x = let ax = abs x in if ax == 1 then [] else texify ax
     cutPlus ('+' : s) = s
     cutPlus s = s
 
