@@ -5,7 +5,7 @@ import Control.Applicative
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import Data.List (intersperse, nub, partition, sort)
+import Data.List (intersperse, partition)
 import Data.Maybe (fromJust)
 import Data.Either (partitionEithers)
 
@@ -85,14 +85,14 @@ texifyVarForm = cutPlus . concat . zipWith texifyVar [1..] . V.toList
     cutPlus ('+' : s) = s
     cutPlus s = s
 
-normalizeDsUs :: Num a => Expr a -> Expr a
-normalizeDsUs = mapExpr normalizeDsUsTerm
+normalizeDs :: Num a => Expr a -> Expr a
+normalizeDs = mapExpr normalizeDsTerm
 
-normalizeDsUsTerm :: Num a => Term a -> Term a
-normalizeDsUsTerm (Term a es) = Term (normalizeDsUsAtom a) (normalizeDsUs <$> es)
+normalizeDsTerm :: Num a => Term a -> Term a
+normalizeDsTerm (Term a es) = Term (normalizeDsAtom a) (normalizeDs <$> es)
 
-normalizeDsUsAtom :: Num a => Atom a -> Atom a
-normalizeDsUsAtom (Atom k ds us e) = Atom k (S.map swapDelta ds) us e
+normalizeDsAtom :: Num a => Atom a -> Atom a
+normalizeDsAtom (Atom k ds us e) = Atom k (S.map swapDelta ds) us e
   where
     swapDelta d = if fromJust (V.find (/= 0) d) > 0 then d else V.map negate d
 
@@ -103,7 +103,7 @@ substituteTerm :: (Num a, Eq a) => Int -> V.Vector Int -> Term a -> Term a
 substituteTerm v vec (Term a es) = Term (substituteAtom v vec a) (substitute v vec <$> es)
 
 substituteAtom :: (Num a, Eq a) => Int -> V.Vector Int -> Atom a -> Atom a
-substituteAtom v vec (Atom k ds us e) =
+substituteAtom v vec (Atom k ds us e) = normalizeDsAtom $
   Atom k (S.map (substituteForm v vec) ds) (S.map (substituteForm v vec) us)
   ((substituteForm v . V.map fromIntegral $ vec) <$> e)
 
@@ -137,8 +137,7 @@ productTerm (Term a1 e1) (Term a2 e2) = Term (productAtom a1 a2) (e1 ++ e2)
 productAtom :: Num a => Atom a -> Atom a -> Atom a
 productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
   let zipAlt f a b = f <$> a <*> b <|> a <|> b
-  in normalizeDsUsAtom $
-     Atom (k1 * k2) (S.union d1 d2) (S.union u1 u2) (zipAlt (V.zipWith (+)) e1 e2)
+  in Atom (k1 * k2) (S.union d1 d2) (S.union u1 u2) (zipAlt (V.zipWith (+)) e1 e2)
 
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
