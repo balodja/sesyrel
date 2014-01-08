@@ -9,6 +9,9 @@ import Data.List (intersperse, nub, partition, sort)
 import Data.Maybe (fromJust)
 import Data.Either (partitionEithers)
 
+import Data.Set (Set)
+import qualified Data.Set as S
+
 
 data Expr a = ExprC (Term a) (Expr a)
             | ExprN (Term a)
@@ -19,8 +22,12 @@ data Term a = Term {
   , termExpr :: [Expr a]
   } deriving (Show, Read, Eq)
 
-data Atom a = Atom a [Vector Int] [Vector Int] (Maybe (Vector a))
-              deriving (Show, Read, Eq)
+data Atom a = Atom {
+    atomConstant :: a
+  , atomDeltas :: Set (Vector Int)
+  , atomUnits :: Set (Vector Int)
+  , atomExponent :: Maybe (Vector a)
+  } deriving (Show, Read, Eq)
 
 toList :: Expr a -> [Term a]
 toList (ExprC t e) = t : toList e
@@ -52,12 +59,12 @@ texifyTerm (Term a es) = case texifyAtom a of
 
 texifyAtom :: (Num a, Ord a, Show a) => Atom a -> (Char, String)
 texifyAtom (Atom k deltas units exponent)
-  | null deltas && null units && maybe False V.null exponent = (sign, show absK)
+  | S.null deltas && S.null units && maybe False V.null exponent = (sign, show absK)
   | otherwise =
     (,) sign $
     (if absK == 1 then [] else show absK)
-      ++ (concat . intersperse " " . map texifyDelta $ deltas)
-      ++ (concat . intersperse " " . map texifyUnit $ units)
+      ++ (concat . intersperse " " . map texifyDelta . S.toList $ deltas)
+      ++ (concat . intersperse " " . map texifyUnit . S.toList $ units)
       ++ texifyExponent ((V.map negate) <$> exponent)
         where
           absK = abs k
@@ -85,7 +92,7 @@ normalizeDsUsTerm :: Num a => Term a -> Term a
 normalizeDsUsTerm (Term a es) = Term (normalizeDsUsAtom a) (normalizeDsUs <$> es)
 
 normalizeDsUsAtom :: Num a => Atom a -> Atom a
-normalizeDsUsAtom (Atom k ds us e) = Atom k (map swapDelta ds) (nub us) e
+normalizeDsUsAtom (Atom k ds us e) = Atom k (S.map swapDelta ds) us e
   where
     swapDelta d = if fromJust (V.find (/= 0) d) > 0 then d else V.map negate d
 
@@ -97,7 +104,7 @@ substituteTerm v vec (Term a es) = Term (substituteAtom v vec a) (substitute v v
 
 substituteAtom :: (Num a, Eq a) => Int -> V.Vector Int -> Atom a -> Atom a
 substituteAtom v vec (Atom k ds us e) =
-  Atom k (map (substituteForm v vec) ds) (map (substituteForm v vec) us)
+  Atom k (S.map (substituteForm v vec) ds) (S.map (substituteForm v vec) us)
   ((substituteForm v . V.map fromIntegral $ vec) <$> e)
 
 substituteForm :: (Num a, Eq a) => Int -> Vector a -> Vector a -> Vector a
@@ -122,7 +129,7 @@ expandTerm (Term a es) =
   fromList . map (foldl productTerm (Term a [])) . sequence $ toList <$> es
 
 product :: Num a => Expr a -> Expr a -> Expr a
-product e1 e2 = ExprN (Term (Atom 1 [] [] Nothing) [e1, e2])
+product e1 e2 = ExprN (Term (Atom 1 S.empty S.empty Nothing) [e1, e2])
 
 productTerm :: Num a => Term a -> Term a -> Term a
 productTerm (Term a1 e1) (Term a2 e2) = Term (productAtom a1 a2) (e1 ++ e2)
@@ -131,12 +138,12 @@ productAtom :: Num a => Atom a -> Atom a -> Atom a
 productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
   let zipAlt f a b = f <$> a <*> b <|> a <|> b
   in normalizeDsUsAtom $
-     Atom (k1 * k2) (d1 ++ d2) (u1 ++ u2) (zipAlt (V.zipWith (+)) e1 e2)
+     Atom (k1 * k2) (S.union d1 d2) (S.union u1 u2) (zipAlt (V.zipWith (+)) e1 e2)
 
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
   let exp = Just $ V.generate length (\i -> if i == variable then lambda else 0)
-  in ExprN $ Term (Atom lambda [] [] exp) []
+  in ExprN $ Term (Atom lambda S.empty S.empty exp) []
 
 distributionAnd :: Num a => Int -> Int -> Int -> Int -> Expr a
 distributionAnd length x a b =
@@ -144,8 +151,9 @@ distributionAnd length x a b =
       term p m i | i == p = 1
                  | i == m = -1
                  | otherwise = 0
-      a1 = Atom 1 [V.generate length (term x b)] [V.generate length (term b a)] Nothing
-      a2 = Atom 1 [V.generate length (term x a)] [V.generate length (term a b)] Nothing
+      single a b = S.singleton $ V.generate length (term a b)
+      a1 = Atom 1 (single x b) (single b a) Nothing
+      a2 = Atom 1 (single x a) (single a b) Nothing
   in ExprC (Term a1 []) (ExprN (Term a2 []))
 
 data Limit = Zero
@@ -163,15 +171,18 @@ integrateAtom :: (Fractional a, Eq a) => Atom a -> Int -> Limit -> Limit -> [Ato
 integrateAtom (Atom k ds us (Just exp)) var lo hi =
   fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> Just intExp
     where
-      intEqualLimits | lo == hi = Just $ [Atom 0 [] [] Nothing]
+      intEqualLimits | lo == hi = Just $ [Atom 0 S.empty S.empty Nothing]
                      | otherwise = Nothing
       
-      intDelta = case partition (\d -> (d V.! var) /= 0) ds of
+      intDelta = case partition (\d -> (d V.! var) /= 0) (S.toList ds) of
         ([], rest) -> Nothing
         (d : ds1, ds2) ->
           let vec = calcSubstitution d
               us1 = calcDeltaUnits vec
-          in Just [substituteAtom var vec (Atom k (ds1 ++ ds2) (us1 ++ us) (Just exp))]
+              a = Atom k
+                  (S.fromList ds1 `S.union` S.fromList ds2)
+                  (S.fromList us1 `S.union` us) (Just exp)
+          in Just [substituteAtom var vec a]
 
       calcSubstitution d | d V.! var > 0 = V.map negate (d V.// [(var, 0)])
                          | otherwise = d V.// [(var, 0)]
@@ -186,7 +197,7 @@ integrateAtom (Atom k ds us (Just exp)) var lo hi =
           higher (Limit l) = [V.zipWith (-) l vec]
 
       intExp = let lambda = exp V.! var
-                   subLimit a Infinity = Atom 0 [] [] Nothing
+                   subLimit a Infinity = Atom 0 S.empty S.empty Nothing
                    subLimit a Zero = substituteAtom var zeroVector a
                    subLimit a (Limit l) = substituteAtom var l a
                in [ subLimit (Atom (-k / lambda) ds us (Just exp)) hi
@@ -200,33 +211,35 @@ integrateAtom (Atom k ds us (Just exp)) var lo hi =
         let vec = V.map negate (u V.// [(var, 0)])
         in case hi of
           Infinity ->
-            let u1 = V.zipWith (-) lowerLimit vec
+            let us1 = V.zipWith (-) lowerLimit vec `S.insert` us
             in integrateAtom (Atom k ds us (Just exp)) var (Limit vec) Infinity
-               ++ integrateAtom (Atom k ds (u1 : us) (Just exp)) var lo (Limit vec)
+               ++ integrateAtom (Atom k ds us1 (Just exp)) var lo (Limit vec)
           Limit higherLimit ->
             let u1 = V.zipWith (-) higherLimit vec
                 u2 = V.zipWith (-) vec lowerLimit
-                u3 = V.zipWith (-) lowerLimit vec
-            in integrateAtom (Atom k ds (u1 : u2 : us) (Just exp)) var (Limit vec) hi
-               ++ integrateAtom (Atom k ds (u3 : us) (Just exp)) var lo hi
+                us1 = u1 `S.insert` (u2 `S.insert` us)
+                us2 = V.zipWith (-) lowerLimit vec `S.insert` us
+            in integrateAtom (Atom k ds us1 (Just exp)) var (Limit vec) hi
+               ++ integrateAtom (Atom k ds us2 (Just exp)) var lo hi
           Zero -> error "integrateAtom: zero at higher limit? no wai"
                        | otherwise =
         let vec = u V.// [(var, 0)]
         in case hi of
           Infinity ->
-            let u1 = V.zipWith (-) vec lowerLimit
-            in integrateAtom (Atom k ds (u1 : us) (Just exp)) var lo (Limit vec)
+            let us1 = V.zipWith (-) vec lowerLimit `S.insert` us
+            in integrateAtom (Atom k ds us1 (Just exp)) var lo (Limit vec)
           Limit higherLimit ->
             let u1 = V.zipWith (-) vec lowerLimit
                 u2 = V.zipWith (-) higherLimit vec
-                u3 = V.zipWith (-) vec higherLimit
-            in integrateAtom (Atom k ds (u1 : u2 : us) (Just exp)) var lo (Limit vec)
-               ++ integrateAtom (Atom k ds (u3 : us) (Just exp)) var lo hi
+                us1 = u1 `S.insert` (u2 `S.insert` us)
+                us2 = V.zipWith (-) vec higherLimit `S.insert` us
+            in integrateAtom (Atom k ds us1 (Just exp)) var lo (Limit vec)
+               ++ integrateAtom (Atom k ds us2 (Just exp)) var lo hi
           Zero -> error "integrateAtom: zero at higher limit? no wai"
       
-      findUnit = case partition (\u -> (u V.! var) /= 0) us of
+      findUnit = case partition (\u -> (u V.! var) /= 0) (S.toList us) of
         ([], rest) -> Nothing
-        (u : us1, us2) -> Just (u, us1 ++ us2)
+        (u : us1, us2) -> Just (u, S.fromList us1 `S.union` S.fromList us2)
         
       lowerLimit = case lo of
         Infinity -> error "integrateAtom: infinity at lower limit? wut?"
@@ -235,8 +248,8 @@ integrateAtom (Atom k ds us (Just exp)) var lo hi =
 
 cancelUsAtom :: Fractional a => Atom a -> Atom a
 cancelUsAtom (Atom k ds us exp) =
-  case partitionEithers . map separate . nub $ us of
-    (ks, us) -> Atom (k * Prelude.product ks) ds us exp
+  case partitionEithers . map separate . S.toList $ us of
+    (ks, us) -> Atom (k * Prelude.product ks) ds (S.fromList us) exp
     where
       separate u | V.all (== 0) u = Left (1/2)
                  | V.all (>= 0) u = Left 1
@@ -248,10 +261,8 @@ groupifyAtoms [] = []
 groupifyAtoms (a : as) = case partition (a `similar`) as of
   ([], rest) -> a : groupifyAtoms rest
   (found, rest) -> let Atom k0 ds us exp = a
-                       getK (Atom k _ _ _) = k
-                       a' = Atom (k0 + sum (map getK found)) ds us exp
+                       a' = Atom (k0 + sum (map atomConstant found)) ds us exp
                    in a' : groupifyAtoms rest
   where
     similar (Atom _ ds1 us1 e1) (Atom _ ds2 us2 e2) =
-      (e1 == e2) && (ds1 `equal` ds2) && (us1 `equal` us2)    
-    equal a b = sort a == sort b
+      (e1 == e2) && (ds1 == ds2) && (us1 == us2)    
