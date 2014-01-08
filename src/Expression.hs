@@ -69,9 +69,11 @@ instance (Num a, Ord a, Texifiable a) => Texifiable (Expr a) where
 
 
 texifyTerm :: (Num a, Ord a, Texifiable a) => Term a -> (Char, String)
-texifyTerm (Term a es) = case texifyAtom a of
-  (sign, atom) -> (sign, atom ++ delimiter ++ exprs)
+texifyTerm (Term a es) | isOne a && (not $ null exprs) = (fst (texifyAtom a), exprs)
+                       | otherwise = (sign, atom ++ delimiter ++ exprs)
     where
+      (sign, atom) = texifyAtom a
+      isOne (Atom k ds us exp) = abs k == 1 && S.null ds && S.null us && maybe True (V.all (== 0)) exp
       delimiter = if null atom || null exprs then "" else " "
       exprs = concat . intersperse " " $ texifyAndParen <$> es
       texifyAndParen e@(ExprC _ _) = "\\left( " ++ texify e ++ " \\right)"
@@ -79,7 +81,9 @@ texifyTerm (Term a es) = case texifyAtom a of
 
 texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, String)
 texifyAtom (Atom k deltas units exponent)
-  | S.null deltas && S.null units && maybe False V.null exponent = (sign, texify absK)
+  | S.null deltas
+    && S.null units
+    && maybe True (V.all (== 0)) exponent = (sign, texify absK)
   | otherwise =
     (,) sign $
     (if absK == 1 then [] else texify absK)
@@ -164,16 +168,36 @@ distributionLambda length variable lambda =
   let exp = Just $ V.generate length (\i -> if i == variable then lambda else 0)
   in ExprN $ Term (Atom lambda S.empty S.empty exp) []
 
+distributionCspLambda :: Num a => Int -> Int -> a -> Int -> Expr a
+distributionCspLambda length varB lambda varA =
+  let exp = Just $ V.generate length
+            (\i -> if i == varA then lambda else
+                     (if i == varB then -lambda else 0))
+  in ExprN $ Term (Atom lambda S.empty (makeSingleDU length varB varA) exp) []
+
 distributionAnd :: Num a => Int -> Int -> Int -> Int -> Expr a
-distributionAnd length x a b =
-  let zero = V.replicate length 0
-      term p m i | i == p = 1
-                 | i == m = -1
-                 | otherwise = 0
-      single a b = S.singleton $ V.generate length (term a b)
-      a1 = normalizeDsAtom $ Atom 1 (single x b) (single b a) Nothing
-      a2 = normalizeDsAtom $ Atom 1 (single x a) (single a b) Nothing
+distributionAnd l x a b =
+  let a1 = normalizeDsAtom $ Atom 1 (makeSingleDU l x b) (makeSingleDU l b a) Nothing
+      a2 = normalizeDsAtom $ Atom 1 (makeSingleDU l x a) (makeSingleDU l a b) Nothing
   in ExprC (Term a1 []) (ExprN (Term a2 []))
+
+distributionOr :: Num a => Int -> Int -> Int -> Int -> Expr a
+distributionOr l x a b =
+  let a1 = normalizeDsAtom $ Atom 1 (makeSingleDU l x a) (makeSingleDU l b a) Nothing
+      a2 = normalizeDsAtom $ Atom 1 (makeSingleDU l x b) (makeSingleDU l a b) Nothing
+  in ExprC (Term a1 []) (ExprN (Term a2 []))
+
+distributionPriorityAnd :: Num a => Int -> Int -> Int -> Int -> Expr a
+distributionPriorityAnd l x a b =
+  let atom = normalizeDsAtom $ Atom 1 (makeSingleDU l x b) (makeSingleDU l b a) Nothing
+  in ExprN (Term atom [])
+
+makeSingleDU :: Int -> Int -> Int -> Set (V.Vector Int)
+makeSingleDU l a b = S.singleton $ V.generate l (term a b)
+  where
+    term p m i | i == p = 1
+               | i == m = -1
+               | otherwise = 0
 
 data Limit = Zero
            | Infinity

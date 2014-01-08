@@ -39,8 +39,8 @@ addFactorM :: Factor -> FaultTreeM ()
 addFactorM factor = modify $ \fts ->
   fts { faultTreeFactors = factor : faultTreeFactors fts }
 
-faultTreeLambdaM :: Rational -> FaultTreeM Int
-faultTreeLambdaM lambda = do
+lambdaM :: Rational -> FaultTreeM Int
+lambdaM lambda = do
   var <- newVariableM
   vars <- ask
   let expr = distributionLambda vars var lambda
@@ -56,17 +56,22 @@ distributionTwoM distr x y = do
   addFactorM (expr, [x, y, var])
   return var
 
-faultTreeAndM :: Int -> Int -> FaultTreeM Int
-faultTreeAndM = distributionTwoM distributionAnd
+andM :: Int -> Int -> FaultTreeM Int
+andM = distributionTwoM distributionAnd
 
-simpleFaultTreeM :: FaultTreeM Int
-simpleFaultTreeM = do
-  a <- faultTreeLambdaM 15.0
-  b <- faultTreeLambdaM 35.0
-  faultTreeAndM a b
-  c <- faultTreeLambdaM 3.0
-  d <- faultTreeAndM a c
-  return c
+priorityAndM :: Int -> Int -> FaultTreeM Int
+priorityAndM = distributionTwoM distributionPriorityAnd
+
+orM :: Int -> Int -> FaultTreeM Int
+orM = distributionTwoM distributionOr
+
+cspM :: Rational -> Int -> FaultTreeM Int
+cspM lambda a = do
+  b <- newVariableM
+  vars <- ask
+  let expr = distributionCspLambda vars b lambda a
+  addFactorM (expr, [a, b])
+  return b
 
 tellFactors :: MonadWriter [String] m => [Factor] -> m ()
 tellFactors factors = do
@@ -77,7 +82,7 @@ tellFactors factors = do
 faultTreeIntegrate :: FaultTree -> (Expr Rational, [String])
 faultTreeIntegrate (FaultTree vars factors) = runWriter $ go factors 0
   where
-  go fs i = if i < vars - 1
+  go fs i = if i < vars
             then do
               fs' <- factorsEliminateVariable i fs
               go fs' (i + 1)
@@ -87,7 +92,7 @@ faultTreeIntegrate (FaultTree vars factors) = runWriter $ go factors 0
 factorsEliminateVariable :: MonadWriter [String] m => Int -> [Factor] -> m [Factor]
 factorsEliminateVariable var factors = do
   tellFactors factors
-  tell ["\\section{Integration of $x_{", show (succ var), "}$.}", ""]
+  tell ["\\section{Integration of $x_{" ++ show (succ var) ++ "}$.}", ""]
   let (varFactors, restFactors) = partition (elem var . snd) factors
       expr = ExprN (Term (Atom 1 S.empty S.empty Nothing) (map fst varFactors))
   tell ["\\begin{dmath*} " ++ "\\int\\limits_0^{+\\infty} "
@@ -100,4 +105,19 @@ factorsEliminateVariable var factors = do
   return $ ((newExpr, newVars) : restFactors)
 
 main :: IO ()
-main = putStr . unlines . snd . faultTreeIntegrate . snd . evalFaultTreeM $ simpleFaultTreeM
+main = putStr . unlines . snd . faultTreeIntegrate . snd . evalFaultTreeM $ simpleFaultTreeM1
+
+simpleFaultTreeM1 :: FaultTreeM Int
+simpleFaultTreeM1 = do
+  a <- lambdaM 15.0
+  b <- lambdaM 35.0
+  andM a b
+  c <- lambdaM 3.0
+  andM a c
+
+simpleFaultTreeM2 :: FaultTreeM Int
+simpleFaultTreeM2 = do
+  a <- lambdaM 15.0
+  b <- cspM 4 a
+  c <- lambdaM 48.0
+  priorityAndM b c
