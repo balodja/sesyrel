@@ -22,19 +22,6 @@ data Term a = Term {
 data Atom a = Atom a [Vector Int] [Vector Int] (Maybe (Vector a))
               deriving (Show, Read, Eq)
 
-mapExpr :: (Term a -> Term a) -> Expr a -> Expr a
-mapExpr f (ExprC t e) = ExprC (f t) (mapExpr f e)
-mapExpr f (ExprN t) = ExprN (f t)
-
-zipAlt :: Alternative f => (a -> a -> a) -> f a -> f a -> f a
-zipAlt f a b = f <$> a <*> b <|> a <|> b
-
-zeroAtom :: Num a => Atom a
-zeroAtom = Atom 0 [] [] Nothing
-
-oneAtom :: Num a => Atom a
-oneAtom = Atom 1 [] [] Nothing
-
 toList :: Expr a -> [Term a]
 toList (ExprC t e) = t : toList e
 toList (ExprN t) = [t]
@@ -43,6 +30,9 @@ fromList :: [Term a] -> Expr a
 fromList (t : []) = ExprN t
 fromList (t : ts) = ExprC t (fromList ts)
 fromList [] = error "fromList: term list is empty"
+
+mapExpr :: (Term a -> Term a) -> Expr a -> Expr a
+mapExpr f = fromList . map f . toList
 
 texify :: (Show a, Num a, Ord a) => Expr a -> String
 texify expr = let terms = texifyTerm <$> toList expr
@@ -108,7 +98,7 @@ substituteTerm v vec (Term a es) = Term (substituteAtom v vec a) (substitute v v
 substituteAtom :: (Num a, Eq a) => Int -> V.Vector Int -> Atom a -> Atom a
 substituteAtom v vec (Atom k ds us e) =
   Atom k (map (substituteForm v vec) ds) (map (substituteForm v vec) us)
-  (fmap (substituteForm v . V.map fromIntegral $ vec) e)
+  ((substituteForm v . V.map fromIntegral $ vec) <$> e)
 
 substituteForm :: (Num a, Eq a) => Int -> Vector a -> Vector a -> Vector a
 substituteForm v vec d | value == 0 = d
@@ -132,14 +122,16 @@ expandTerm (Term a es) =
   fromList . map (foldl productTerm (Term a [])) . sequence $ toList <$> es
 
 product :: Num a => Expr a -> Expr a -> Expr a
-product e1 e2 = ExprN (Term oneAtom [e1, e2])
+product e1 e2 = ExprN (Term (Atom 1 [] [] Nothing) [e1, e2])
 
 productTerm :: Num a => Term a -> Term a -> Term a
 productTerm (Term a1 e1) (Term a2 e2) = Term (productAtom a1 a2) (e1 ++ e2)
 
 productAtom :: Num a => Atom a -> Atom a -> Atom a
 productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
-  normalizeDsUsAtom $ Atom (k1 * k2) (d1 ++ d2) (u1 ++ u2) (zipAlt (V.zipWith (+)) e1 e2)
+  let zipAlt f a b = f <$> a <*> b <|> a <|> b
+  in normalizeDsUsAtom $
+     Atom (k1 * k2) (d1 ++ d2) (u1 ++ u2) (zipAlt (V.zipWith (+)) e1 e2)
 
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
@@ -194,7 +186,7 @@ integrateAtom (Atom k ds us (Just exp)) var lo hi =
           higher (Limit l) = [V.zipWith (-) l vec]
 
       intExp = let lambda = exp V.! var
-                   subLimit a Infinity = zeroAtom
+                   subLimit a Infinity = Atom 0 [] [] Nothing
                    subLimit a Zero = substituteAtom var zeroVector a
                    subLimit a (Limit l) = substituteAtom var l a
                in [ subLimit (Atom (-k / lambda) ds us (Just exp)) hi
