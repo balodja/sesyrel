@@ -3,7 +3,7 @@ import Control.Applicative
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 
-import Data.List (intersperse, nub)
+import Data.List (intersperse, nub, partition)
 import Data.Maybe (fromJust)
 
 
@@ -26,8 +26,8 @@ mapExpr f (ExprN t) = ExprN (f t)
 zipAlt :: Alternative f => (a -> a -> a) -> f a -> f a -> f a
 zipAlt f a b = f <$> a <*> b <|> a <|> b
 
-oneTerm :: Num a => Term a
-oneTerm = Term oneAtom []
+zeroAtom :: Num a => Atom a
+zeroAtom = Atom 0 [] [] Nothing
 
 oneAtom :: Num a => Atom a
 oneAtom = Atom 1 [] [] Nothing
@@ -152,9 +152,88 @@ distributionAnd length x a b =
       a1 = Atom 1 [V.generate length (term x b)] [V.generate length (term b a)] Nothing
       a2 = Atom 1 [V.generate length (term x a)] [V.generate length (term a b)] Nothing
   in ExprC (Term a1 []) (ExprN (Term a2 []))
-      
+
 simpleExpr :: Expr Int
 simpleExpr = ExprN $ Term oneAtom [distributionAnd 3 2 0 1, distributionLambda 3 0 15, distributionLambda 3 1 35]
+
+data Limit = Zero
+           | Infinity
+           | Limit (Vector Int)
+           deriving (Eq, Read, Show)
+
+integrateAtom :: (Fractional a, Eq a) => Atom a -> Int -> Limit -> Limit -> [Atom a]
+integrateAtom (Atom k ds us (Just exp)) var lo hi =
+  fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> Just intExp
+    where
+      intEqualLimits | lo == hi = Just $ [Atom 0 [] [] Nothing]
+                     | otherwise = Nothing
+      
+      intDelta = case partition (\d -> (d V.! var) /= 0) ds of
+        ([], rest) -> Nothing
+        (d : ds1, ds2) ->
+          let vec = calcSubstitution d
+              us1 = calcDeltaUnits vec
+          in Just [substituteAtom var vec (Atom k (ds1 ++ ds2) (us1 ++ us) (Just exp))]
+
+      calcSubstitution d | d V.! var > 0 = V.map negate (d V.// [(var, 0)])
+                         | otherwise = d V.// [(var, 0)]
+
+      calcDeltaUnits vec = lower lo : higher hi
+        where
+          lower Zero = vec
+          lower Infinity = error "calcLimitUnits: lower infinite limit? wut?"
+          lower (Limit l) = V.zipWith (-) vec l
+          higher Zero = error "calcLimitUnits: higher zero limit? wut?"
+          higher Infinity = []
+          higher (Limit l) = [V.zipWith (-) l vec]
+
+      intExp = let lambda = exp V.! var
+                   subLimit a Infinity = zeroAtom
+                   subLimit a Zero = substituteAtom var zeroVector a
+                   subLimit a (Limit l) = substituteAtom var l a
+               in [ subLimit (Atom (-k / lambda) ds us (Just exp)) hi
+                  , subLimit (Atom (k / lambda) ds us (Just exp)) lo
+                  ]
+      
+      zeroVector = V.replicate (V.length exp) 0
+
+      intUnit = intUnit' <$> findUnit
+      intUnit' (u, us) | (u V.! var) > 0 =
+        let vec = V.map negate (u V.// [(var, 0)])
+        in case hi of
+          Infinity ->
+            let u1 = V.zipWith (-) lowerLimit vec
+            in integrateAtom (Atom k ds us (Just exp)) var (Limit vec) Infinity
+               ++ integrateAtom (Atom k ds (u1 : us) (Just exp)) var lo (Limit vec)
+          Limit higherLimit ->
+            let u1 = V.zipWith (-) higherLimit vec
+                u2 = V.zipWith (-) vec lowerLimit
+                u3 = V.zipWith (-) lowerLimit vec
+            in integrateAtom (Atom k ds (u1 : u2 : us) (Just exp)) var (Limit vec) hi
+               ++ integrateAtom (Atom k ds (u3 : us) (Just exp)) var lo hi
+          Zero -> error "integrateAtom: zero at higher limit? no wai"
+                       | otherwise =
+        let vec = u V.// [(var, 0)]
+        in case hi of
+          Infinity ->
+            let u1 = V.zipWith (-) vec lowerLimit
+            in integrateAtom (Atom k ds (u1 : us) (Just exp)) var lo (Limit vec)
+          Limit higherLimit ->
+            let u1 = V.zipWith (-) vec lowerLimit
+                u2 = V.zipWith (-) higherLimit vec
+                u3 = V.zipWith (-) vec higherLimit
+            in integrateAtom (Atom k ds (u1 : u2 : us) (Just exp)) var lo (Limit vec)
+               ++ integrateAtom (Atom k ds (u3 : us) (Just exp)) var lo hi
+          Zero -> error "integrateAtom: zero at higher limit? no wai"
+      
+      findUnit = case partition (\u -> (u V.! var) /= 0) us of
+        ([], rest) -> Nothing
+        (u : us1, us2) -> Just (u, us1 ++ us2)
+        
+      lowerLimit = case lo of
+        Infinity -> error "integrateAtom: infinity at lower limit? wut?"
+        Limit l -> l
+        Zero -> zeroVector
 
 --main :: IO ()
 --main = putStrLn . (\t -> "$$ " ++ t ++ " $$") . texify . deepExpand $ simpleExpr
