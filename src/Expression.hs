@@ -185,7 +185,7 @@ integrate expr var lo hi =
   let doTerm (Term a _) = integrateAtom a var lo hi
       filterAtoms = filter (\(Atom k _ _ _) -> k /= 0)
   in fromList . map (`Term` [])
-     . groupifyAtoms . filterAtoms
+     . filterAtoms . groupifyAtoms . filterAtoms
      . map cancelUsAtom . concatMap doTerm
      . toList . deepExpand $ expr
 
