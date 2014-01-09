@@ -93,8 +93,10 @@ texifyAtom (Atom k deltas units exponent)
         where
           absK = abs k
           sign = if signum k == 1 then '+' else '-'
-          texifyDelta d = "\\delta(" ++ texifyVarForm d ++ ")"
-          texifyUnit u = "\\theta(" ++ texifyVarForm u ++ ")"
+          nullCheck [] = "0"
+          nullCheck s = s
+          texifyDelta d = "\\delta(" ++ nullCheck (texifyVarForm d) ++ ")"
+          texifyUnit u = "\\theta(" ++ nullCheck (texifyVarForm u) ++ ")"
           texifyExponent Nothing = []
           texifyExponent (Just e) = let vf = texifyVarForm e
                                     in if null vf then [] else "e^{" ++ vf ++ "}"
@@ -196,13 +198,24 @@ distributionOr l x a b =
       a2 = normalizeDsAtom $ Atom 1 (makeSingleDU l x b) (makeSingleDU l a b) Nothing
   in ExprC (Term a1 []) (ExprN (Term a2 []))
 
+-- should not be used
 distributionPriorityAnd :: Num a => Int -> Int -> Int -> Int -> Expr a
 distributionPriorityAnd l x a b =
   let atom = normalizeDsAtom $ Atom 1 (makeSingleDU l x b) (makeSingleDU l b a) Nothing
   in ExprN (Term atom [])
 
+distributionPriorityAndOr :: Num a => Int -> Int -> Int -> Int -> Int -> Expr a
+distributionPriorityAndOr l x a b c =
+  let us1 = makeSingleDU l b a `S.union` makeSingleDU l c b
+      us2 = makeSingleDU l b a `S.union` makeSingleDU l b c
+      a1 = normalizeDsAtom $ Atom 1 (makeSingleDU l x b) us1 Nothing
+      a2 = normalizeDsAtom $ Atom 1 (makeSingleDU l x c) us2 Nothing
+      a3 = normalizeDsAtom $ Atom 1 (makeSingleDU l x c) (makeSingleDU l a b) Nothing
+  in fromList [Term a1 [], Term a2 [], Term a3 []]
+
 makeSingleDU :: Int -> Int -> Int -> Set (V.Vector Int)
-makeSingleDU l a b = S.singleton $ V.generate l (term a b)
+makeSingleDU l a b | a == b = S.singleton $ V.replicate l 0
+                   | otherwise = S.singleton $ V.generate l (term a b)
   where
     term p m i | i == p = 1
                | i == m = -1

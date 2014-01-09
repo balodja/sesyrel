@@ -59,8 +59,13 @@ distributionTwoM distr x y = do
 andM :: Int -> Int -> FaultTreeM Int
 andM = distributionTwoM distributionAnd
 
-priorityAndM :: Int -> Int -> FaultTreeM Int
-priorityAndM = distributionTwoM distributionPriorityAnd
+priorityAndOrM :: Int -> Int -> Int -> FaultTreeM Int
+priorityAndOrM a b c = do
+  var <- newVariableM
+  vars <- ask
+  let expr = distributionPriorityAndOr vars var a b c
+  addFactorM (expr, [a, b, c, var])
+  return var
 
 orM :: Int -> Int -> FaultTreeM Int
 orM = distributionTwoM distributionOr
@@ -114,6 +119,7 @@ factorsEliminateVariable var factors = do
   tell ["\\begin{dmath*} " ++ texify newExpr ++ "\\end{dmath*}", ""]
   return $ ((newExpr, newVars) : restFactors)
 
+main :: IO ()
 main = do
   let doIt = (\(name, mbOrder, ftree) ->
                faultTreeProcess name mbOrder (snd $ evalFaultTreeM ftree))
@@ -123,7 +129,7 @@ trees :: [(String, Maybe [Int], FaultTreeM Int)]
 trees =
   [ ("ftree1", Nothing, simpleFaultTreeM1)
   , ("ftree1", Just [0, 3, 1, 2], simpleFaultTreeM1)
-  , ("ftree2", Just [0, 2, 1], simpleFaultTreeM2)
+  , ("ftree2", Nothing, simpleFaultTreeM2)
   ]
 
 simpleFaultTreeM1 :: FaultTreeM Int
@@ -138,5 +144,4 @@ simpleFaultTreeM2 :: FaultTreeM Int
 simpleFaultTreeM2 = do
   a <- lambdaM 10.0
   b <- lambdaM 3.0
-  c <- priorityAndM a b
-  orM b c
+  priorityAndOrM a b b
