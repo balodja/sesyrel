@@ -114,10 +114,6 @@ factorsEliminateVariable var factors = do
   tell ["\\begin{dmath*} " ++ texify newExpr ++ "\\end{dmath*}", ""]
   return $ ((newExpr, newVars) : restFactors)
 
-{-
-main :: IO ()
-main = putStr . unlines . snd . runWriter . faultTreeIntegrate Nothing . snd . evalFaultTreeM $ simpleFaultTreeM2
--}
 main = do
   let doIt = (\(name, mbOrder, ftree) ->
                faultTreeProcess name mbOrder (snd $ evalFaultTreeM ftree))
@@ -127,7 +123,7 @@ trees :: [(String, Maybe [Int], FaultTreeM Int)]
 trees =
   [ ("ftree1", Nothing, simpleFaultTreeM1)
   , ("ftree1", Just [0, 3, 1, 2], simpleFaultTreeM1)
-  , ("ftree2", Nothing, simpleFaultTreeM2)
+  , ("ftree2", Just [0, 2, 1], simpleFaultTreeM2)
   ]
 
 simpleFaultTreeM1 :: FaultTreeM Int
@@ -143,4 +139,4 @@ simpleFaultTreeM2 = do
   a <- lambdaM 10.0
   b <- lambdaM 3.0
   c <- priorityAndM a b
-  orM c a
+  orM b c
