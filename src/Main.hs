@@ -75,24 +75,34 @@ cspM lambda a = do
 
 tellFactors :: MonadWriter [String] m => [Factor] -> m ()
 tellFactors factors = do
-  tell ["\\section{Factors}", ""]
+  tell ["\\subsection{Factors}", ""]
   forM_ factors $
     \(expr, _) -> tell ["\\begin{dmath*} " ++ texify expr ++ "\\end{dmath*}", ""]
 
-faultTreeIntegrate :: FaultTree -> (Expr Rational, [String])
-faultTreeIntegrate (FaultTree vars factors) = runWriter $ go factors 0
+faultTreeProcess :: MonadWriter [String] m => String -> Maybe [Int] -> FaultTree -> m ()
+faultTreeProcess name mbOrder ftree@(FaultTree vars factors) = do
+  let lastVar = vars - 1
+  tell ["\\section{" ++ name ++ "}", ""]
+  expr <- faultTreeIntegrate mbOrder ftree
+  [(p, _)] <- factorsEliminateVariable lastVar [(expr, [lastVar])]
+  tell ["\\subsection{Results}", ""]
+  tell ["$$ p(F) = " ++ texify p ++ " $$", ""]
+  let mttf = calcMttf lastVar expr
+  tell ["$$ MTTF = " ++ texify mttf ++ " $$", ""]
+
+faultTreeIntegrate :: MonadWriter [String] m => Maybe [Int] -> FaultTree -> m (Expr Rational)
+faultTreeIntegrate mbOrder (FaultTree vars factors) = go factors order
   where
-  go fs i = if i < vars
-            then do
-              fs' <- factorsEliminateVariable i fs
-              go fs' (i + 1)
-            else
-              return . fst . head $ fs
+    order = maybe [0 .. vars - 2] id mbOrder
+    go fs [] = return . fst . head $ fs
+    go fs (v : vs) = do
+              fs' <- factorsEliminateVariable v fs
+              go fs' vs
 
 factorsEliminateVariable :: MonadWriter [String] m => Int -> [Factor] -> m [Factor]
 factorsEliminateVariable var factors = do
   tellFactors factors
-  tell ["\\section{Integration of $x_{" ++ show (succ var) ++ "}$.}", ""]
+  tell ["\\subsection{Integration of $x_{" ++ show (succ var) ++ "}$}", ""]
   let (varFactors, restFactors) = partition (elem var . snd) factors
       expr = ExprN (Term (Atom 1 S.empty S.empty Nothing) (map fst varFactors))
   tell ["\\begin{dmath*} " ++ "\\int\\limits_0^{+\\infty} "
@@ -104,8 +114,21 @@ factorsEliminateVariable var factors = do
   tell ["\\begin{dmath*} " ++ texify newExpr ++ "\\end{dmath*}", ""]
   return $ ((newExpr, newVars) : restFactors)
 
+{-
 main :: IO ()
-main = putStr . unlines . snd . faultTreeIntegrate . snd . evalFaultTreeM $ simpleFaultTreeM1
+main = putStr . unlines . snd . runWriter . faultTreeIntegrate Nothing . snd . evalFaultTreeM $ simpleFaultTreeM2
+-}
+main = do
+  let doIt = (\(name, mbOrder, ftree) ->
+               faultTreeProcess name mbOrder (snd $ evalFaultTreeM ftree))
+  writeFile "output.tex" . unlines . execWriter . mapM_ doIt $ trees
+
+trees :: [(String, Maybe [Int], FaultTreeM Int)]
+trees =
+  [ ("ftree1", Nothing, simpleFaultTreeM1)
+  , ("ftree1", Just [0, 3, 1, 2], simpleFaultTreeM1)
+  , ("ftree2", Nothing, simpleFaultTreeM2)
+  ]
 
 simpleFaultTreeM1 :: FaultTreeM Int
 simpleFaultTreeM1 = do
@@ -117,7 +140,7 @@ simpleFaultTreeM1 = do
 
 simpleFaultTreeM2 :: FaultTreeM Int
 simpleFaultTreeM2 = do
-  a <- lambdaM 15.0
-  b <- cspM 4 a
-  c <- lambdaM 48.0
-  priorityAndM b c
+  a <- lambdaM 10.0
+  b <- lambdaM 3.0
+  c <- priorityAndM a b
+  orM c a

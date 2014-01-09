@@ -163,6 +163,15 @@ productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
   let zipAlt f a b = f <$> a <*> b <|> a <|> b
   in Atom (k1 * k2) (S.union d1 d2) (S.union u1 u2) (zipAlt (V.zipWith (+)) e1 e2)
 
+calcMttf :: (Eq a, Fractional a) => Int -> Expr a -> a
+calcMttf var = sum . map mapTerm . toList
+  where
+    checkAtom (Atom _ ds us exp) =
+      S.null ds && S.null us && maybe True (\v -> V.all (== 0) (v V.// [(var, 0)])) exp
+    mapTerm (Term a@(Atom k _ _ (Just exp)) []) | checkAtom a = k / (exp V.! var) ^ 2
+                                                | otherwise =
+                                                  error "calcMttf: too complex expr"
+
 distributionLambda :: Num a => Int -> Int -> a -> Expr a
 distributionLambda length variable lambda =
   let exp = Just $ V.generate length (\i -> if i == variable then lambda else 0)
