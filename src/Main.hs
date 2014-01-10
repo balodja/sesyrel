@@ -1,9 +1,10 @@
 {-# LANGUAGE RecursiveDo, FlexibleContexts #-}
 
 import Expression
+import Elimination (findOrdering)
 
 import qualified Data.Set as S
-import Data.List (partition, union, delete)
+import Data.List (partition, union, delete, intersperse)
 
 import Control.Monad.RWS
 import Control.Monad.Writer
@@ -95,10 +96,15 @@ faultTreeProcess name mbOrder ftree@(FaultTree vars factors) = do
   let mttf = calcMttf lastVar expr
   tell ["$$ MTTF = " ++ texify mttf ++ " $$", ""]
 
-faultTreeIntegrate :: MonadWriter [String] m => Maybe [Int] -> FaultTree -> m (Expr Rational)
-faultTreeIntegrate mbOrder (FaultTree vars factors) = go factors order
+faultTreeIntegrate :: MonadWriter [String] m =>
+                      Maybe [Int] -> FaultTree -> m (Expr Rational)
+faultTreeIntegrate mbOrder (FaultTree vars factors) =
+  do
+    tell ["Elemenation order: " ++
+          concat (intersperse ", " $ map (show . succ) order), ""]
+    go factors order
   where
-    order = maybe [0 .. vars - 2] id mbOrder
+    order = maybe (findOrdering [0 .. vars - 2] (map snd factors)) id mbOrder
     go fs [] = return . fst . head $ fs
     go fs (v : vs) = do
               fs' <- factorsEliminateVariable v fs
