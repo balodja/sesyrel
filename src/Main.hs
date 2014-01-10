@@ -100,7 +100,7 @@ faultTreeIntegrate :: MonadWriter [String] m =>
                       Maybe [Int] -> FaultTree -> m (Expr Rational)
 faultTreeIntegrate mbOrder (FaultTree vars factors) =
   do
-    tell ["Elemenation order: " ++
+    tell ["Elimination order: " ++
           concat (intersperse ", " $ map (show . succ) order), ""]
     go factors order
   where

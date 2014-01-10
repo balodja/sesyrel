@@ -1,4 +1,4 @@
-module Elimination where
+module Elimination (findOrdering) where
 
 import Data.List (delete, elemIndex)
 import Data.Maybe (fromJust)
