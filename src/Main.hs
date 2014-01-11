@@ -115,7 +115,7 @@ factorsEliminateVariable var factors = do
   tellFactors factors
   tell ["\\subsection{Integration of $x_{" ++ show (succ var) ++ "}$}", ""]
   let (varFactors, restFactors) = partition (elem var . snd) factors
-      expr = ExprN (Term (Atom 1 S.empty S.empty Nothing) (map fst varFactors))
+      expr = ExprN (Term (Atom 1 S.empty [] Nothing) (map fst varFactors))
   tell ["\\begin{dmath*} " ++ "\\int\\limits_0^{+\\infty} "
         ++ texify expr ++ "\\textrm{dx}_{" ++ show (var + 1)
         ++ "} \\end{dmath*}"
@@ -136,6 +136,7 @@ trees =
   [ ("ftree1", Nothing, simpleFaultTreeM1)
   , ("ftree1", Just [0, 3, 1, 2], simpleFaultTreeM1)
   , ("ftree2", Nothing, simpleFaultTreeM2)
+  , ("ftree3", Nothing, simpleFaultTreeM3)
   ]
 
 simpleFaultTreeM1 :: FaultTreeM Int
@@ -151,3 +152,11 @@ simpleFaultTreeM2 = do
   a <- lambdaM 10.0
   b <- lambdaM 3.0
   priorityAndOrM a b b
+
+simpleFaultTreeM3 :: FaultTreeM Int
+simpleFaultTreeM3 = do
+  a <- lambdaM 10.0
+  b <- andM a a
+  c <- andM a b
+  d <- orM a c
+  priorityAndOrM d a c
