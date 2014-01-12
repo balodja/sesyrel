@@ -283,7 +283,7 @@ integrateAtom (Atom k ds us exp') var lo hi =
                         <|> (listToMaybe $ map V.length (S.toList ds))
                         <|> (listToMaybe $ map V.length us)
                         <|> error "integrateAtom: no dimension for atom? :("
-      zeroVector = V.replicate (V.length exp) 0
+      zeroVector = V.replicate systemDimension 0
 
       intUnit = intUnit' <$> findUnit
       intUnit' (u, us) | (u V.! var) > 0 =
