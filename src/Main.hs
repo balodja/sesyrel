@@ -137,6 +137,7 @@ trees =
   , ("ftree1", Just [0, 3, 1, 2], simpleFaultTreeM1)
   , ("ftree2", Nothing, simpleFaultTreeM2)
   , ("ftree3", Nothing, simpleFaultTreeM3)
+  , ("failed fault tree", Nothing, failedFaultTree)
   ]
 
 simpleFaultTreeM1 :: FaultTreeM Int
@@ -160,3 +161,57 @@ simpleFaultTreeM3 = do
   c <- andM a b
   d <- orM a c
   priorityAndOrM d a c
+
+failedFaultTree :: FaultTreeM Int
+failedFaultTree = do
+  hydro1 <- lambdaM 70
+  hydro2 <- lambdaM 70
+  hydro3 <- lambdaM 70
+  ccu1 <- lambdaM 50
+  valve1 <- lambdaM 10
+  c1 <- orM hydro1 ccu1
+  cAndC1 <- andM c1 hydro2
+  section1 <- priorityAndOrM valve1 c1 cAndC1
+  ccu2 <- lambdaM 50
+  valve2 <- lambdaM 10
+  c2 <- orM hydro2 ccu2
+  cAndC2 <- andM c2 hydro3
+  section2 <- priorityAndOrM valve2 c2 cAndC2
+  andM section1 section2
+
+escalatorChannelM :: Int -> FaultTreeM Int
+escalatorChannelM hydro = do
+  ccu <- lambdaM 50
+  steer <- lambdaM 15
+  x <- orM ccu hydro
+  orM x steer
+
+escalatorFaultTree1 :: FaultTreeM Int
+escalatorFaultTree1 = do
+  let escalatorSectionM h1 h2 = do
+        c1 <- escalatorChannelM h1
+        c2 <- escalatorChannelM h2
+        valve <- lambdaM 10
+        cAndC <- andM c1 c2
+        priorityAndOrM valve c1 cAndC
+  hydro1 <- lambdaM 70
+  hydro2 <- lambdaM 70
+  hydro3 <- lambdaM 70
+  section1 <- escalatorSectionM hydro1 hydro2
+  section2 <- escalatorSectionM hydro1 hydro3
+  andM section1 section2
+
+escalatorFaultTree2 :: FaultTreeM Int
+escalatorFaultTree2 = do
+  let escalatorSectionM h1 h2 = do
+        c1 <- escalatorChannelM h1
+        c2 <- escalatorChannelM h2
+        valve <- lambdaM 10
+        x <- orM c2 valve
+        andM c1 x
+  hydro1 <- lambdaM 70
+  hydro2 <- lambdaM 70
+  hydro3 <- lambdaM 70
+  section1 <- escalatorSectionM hydro1 hydro2
+  section2 <- escalatorSectionM hydro1 hydro3
+  andM section1 section2
