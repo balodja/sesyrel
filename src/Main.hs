@@ -164,17 +164,12 @@ simpleFaultTreeM3 = do
 
 failedFaultTree :: FaultTreeM Int
 failedFaultTree = do
-  hydro1 <- lambdaM 70
-  hydro2 <- lambdaM 70
-  ccu1 <- lambdaM 50
-  valve1 <- lambdaM 10
-  c1 <- orM hydro1 ccu1
-  cAndC1 <- andM c1 hydro2
-  section1 <- priorityAndOrM valve1 c1 cAndC1
-  ccu2 <- lambdaM 50
-  c2 <- orM hydro2 ccu2
-  section2 <- priorityAndOrM valve1 c2 cAndC1
-  andM section1 section2
+  x1 <- lambdaM 70
+  x2 <- lambdaM 70
+  v <- lambdaM 10
+  y1 <- priorityAndOrM v x1 x2
+  y2 <- priorityAndOrM v x1 x2
+  orM y1 y2
 
 escalatorChannelM :: Int -> FaultTreeM Int
 escalatorChannelM hydro = do
