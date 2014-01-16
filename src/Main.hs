@@ -120,8 +120,8 @@ factorsEliminateVariable var factors = do
         ++ texify expr ++ "\\textrm{dx}_{" ++ show (var + 1)
         ++ "} \\end{dmath*}"
        , "", "$$ = $$", ""]
-  let newExpr = integrate expr var Zero Infinity
-      newVars = delete var . foldl union [] . map snd $ varFactors
+  newExpr <- integrateM expr var Zero Infinity
+  let newVars = delete var . foldl union [] . map snd $ varFactors
   tell ["\\begin{dmath*} " ++ texify newExpr ++ "\\end{dmath*}", ""]
   return $ ((newExpr, newVars) : restFactors)
 

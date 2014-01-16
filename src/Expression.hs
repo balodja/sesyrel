@@ -1,6 +1,9 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module Expression where
 
 import Control.Applicative
+import Control.Monad.Writer
 
 import Data.Vector (Vector)
 import qualified Data.Vector as V
@@ -232,14 +235,24 @@ data Limit = Zero
            | Limit (Vector Int)
            deriving (Eq, Read, Show)
 
-integrate :: (Fractional a, Eq a) => Expr a -> Int -> Limit -> Limit -> Expr a
-integrate expr var lo hi =
-  let doTerm (Term a _) = integrateAtom a var lo hi
-      filterAtoms = filter (\(Atom k _ _ _) -> k /= 0)
-  in fromList . map (`Term` [])
-     . filterAtoms . groupifyAtoms . filterAtoms
-     . map cancelUsAtom . concatMap doTerm
-     . toList . deepExpand $ expr
+integrate :: (Fractional a, Ord a, Texifiable a) => Expr a -> Int -> Limit -> Limit -> Expr a
+integrate expr val lo hi = fst . runWriter $ integrateM expr val lo hi
+
+integrateM :: (Fractional a, Ord a, Texifiable a, MonadWriter [String] m) => Expr a -> Int -> Limit -> Limit -> m (Expr a)
+integrateM expr var lo hi = do
+  let filterAtoms = filter (\(Atom k _ _ _) -> k /= 0)
+      integrateTermM (Term atom _) = do
+        tell ["\\paragraph{Atom}", ""]
+        let result = integrateAtom atom var lo hi
+            exprBefore = ExprN (Term atom [])
+            exprAfter = fromList [Term a [] | a <- result]
+        tell ["\\begin{dmath*} " ++ "\\int\\limits_0^{+\\infty} "
+              ++ texify exprBefore ++ "\\textrm{dx}_{" ++ show (var + 1)
+              ++ "} = " ++ texify exprAfter ++ "\\end{dmath*}", ""]
+        return result
+  atoms' <- liftM concat . mapM integrateTermM . toList . deepExpand $ expr
+  let atoms = filterAtoms . groupifyAtoms . filterAtoms . map cancelUsAtom $ atoms'
+  return $ fromList [Term a [] | a <- atoms]
 
 integrateAtom :: (Fractional a, Eq a) => Atom a -> Int -> Limit -> Limit -> [Atom a]
 integrateAtom (Atom k ds us exp') var lo hi =
