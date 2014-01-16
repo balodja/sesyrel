@@ -303,9 +303,10 @@ integrateAtom (Atom k ds us exp') var lo hi =
         let vec = V.map negate (u V.// [(var, 0)])
         in case hi of
           Infinity ->
-            let us1 = V.zipWith (-) lowerLimit vec : us
-            in integrateAtom (Atom k ds us exp') var (Limit vec) Infinity
-               ++ integrateAtom (Atom k ds us1 exp') var lo (Limit vec)
+            let us1 = V.zipWith (-) vec lowerLimit : us
+                us2 = V.zipWith (-) lowerLimit vec : us
+            in integrateAtom (Atom k ds us1 exp') var (Limit vec) Infinity
+               ++ integrateAtom (Atom k ds us2 exp') var lo Infinity
           Limit higherLimit ->
             let u1 = V.zipWith (-) higherLimit vec
                 u2 = V.zipWith (-) vec lowerLimit
