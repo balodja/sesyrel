@@ -34,9 +34,10 @@ evalFaultTreeM a = (\(x, s, _) -> (x, s)) $
 
 newVariableM :: FaultTreeM Int
 newVariableM = do
+  vars <- ask
   var <- gets faultTreeVariables
   modify $ \fts -> fts { faultTreeVariables = succ (faultTreeVariables fts) }
-  return var
+  return (vars - var - 1)
 
 addFactorM :: Factor -> FaultTreeM ()
 addFactorM factor = modify $ \fts ->
@@ -89,7 +90,7 @@ tellFactors factors = do
 
 faultTreeProcess :: MonadWriter [String] m => String -> Maybe [Int] -> FaultTree -> m ()
 faultTreeProcess name mbOrder ftree@(FaultTree vars factors) = do
-  let lastVar = vars - 1
+  let lastVar = 0
   tell ["\\section{" ++ name ++ "}", ""]
   expr <- faultTreeIntegrate mbOrder ftree
   [(p, _)] <- factorsEliminateVariable lastVar [(expr, [lastVar])]
@@ -106,7 +107,7 @@ faultTreeIntegrate mbOrder (FaultTree vars factors) =
           concat (intersperse ", " $ map (show . succ) order), ""]
     go factors order
   where
-    order = maybe (findOrdering [0 .. vars - 2] (map snd factors)) id mbOrder
+    order = maybe (findOrdering [1 .. vars - 1] (map snd factors)) id mbOrder
     go fs [] = return . fst . head $ fs
     go fs (v : vs) = do
               fs' <- factorsEliminateVariable v fs
@@ -136,7 +137,7 @@ main = do
 trees :: [(String, Maybe [Int], FaultTreeM Int)]
 trees =
   [ ("ftree1", Nothing, simpleFaultTreeM1)
-  , ("ftree1", Just [0, 3, 1, 2], simpleFaultTreeM1)
+  , ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM1)
   , ("ftree2", Nothing, simpleFaultTreeM2)
   , ("ftree3", Nothing, simpleFaultTreeM3)
   , ("failed fault tree", Nothing, failedFaultTree)
