@@ -2,6 +2,8 @@
 
 import Expression
 import Elimination (findOrdering)
+import Ratio
+import Prelude hiding (Rational)
 
 import qualified Data.Set as S
 import Data.List (partition, union, delete, intersperse)
@@ -17,7 +19,7 @@ type FaultTreeM = RWS Int [String] FaultTree
 data FaultTree = FaultTree {
     faultTreeVariables :: Int
   , faultTreeFactors :: [Factor]
-  } deriving (Show, Read, Eq)
+  } deriving (Show, Eq)
 
 type Factor = (Expr Rational, [Int])
 

@@ -11,7 +11,7 @@ import qualified Data.Vector as V
 import Data.List (intersperse, partition, union)
 import Data.Maybe (fromJust, listToMaybe)
 import Data.Either (partitionEithers)
-import Data.Ratio (Ratio, numerator, denominator)
+import Ratio (Ratio, numerator, denominator)
 
 import Data.Set (Set)
 import qualified Data.Set as S
