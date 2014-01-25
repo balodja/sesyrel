@@ -1,4 +1,10 @@
-module Ratio (Ratio, Rational, numerator, denominator, (%)) where
+module Ratio (
+  Ratio,
+  Rational,
+  RealInfinite(..),
+  numerator,
+  denominator,
+  (%)) where
 
 import Prelude hiding (Rational)
 import qualified Data.Ratio as R (numerator, denominator, (%))
@@ -51,6 +57,16 @@ instance (Num a, Ord a) => Ord (Ratio a) where
 
 instance Integral a => Real (Ratio a) where
   toRational (p :% q) = (toInteger p) R.% (toInteger q)
+
+class Num a => RealInfinite a where
+  plusInfinity :: a
+  minusInfinity :: a
+  minusInfinity = negate plusInfinity
+  nan :: a
+  nan = plusInfinity - plusInfinity
+
+instance Integral a => RealInfinite (Ratio a) where
+  plusInfinity = 1 :% 0
 
 infixl 7 %
 (%) :: Integral a => a -> a -> Ratio a

@@ -6,6 +6,7 @@ import Ratio
 import Prelude hiding (Rational)
 
 import qualified Data.Set as S
+import qualified Data.IntMap.Strict as IM
 import Data.List (partition, union, delete, intersperse)
 
 import Control.Monad.RWS
@@ -47,16 +48,15 @@ lambdaM :: Rational -> FaultTreeM Int
 lambdaM lambda = do
   var <- newVariableM
   vars <- ask
-  let expr = distributionLambda vars var lambda
+  let expr = distributionLambda var lambda
   addFactorM (expr, [var])
   return var
 
-distributionTwoM :: (Int -> Int -> Int -> Int -> Expr Rational) ->
+distributionTwoM :: (Int -> Int -> Int -> Expr Rational) ->
                     Int -> Int -> FaultTreeM Int
 distributionTwoM distr x y = do
   var <- newVariableM
-  vars <- ask
-  let expr = distr vars var x y
+  let expr = distr var x y
   addFactorM (expr, [x, y, var])
   return var
 
@@ -66,8 +66,7 @@ andM = distributionTwoM distributionAnd
 priorityAndOrM :: Int -> Int -> Int -> FaultTreeM Int
 priorityAndOrM a b c = do
   var <- newVariableM
-  vars <- ask
-  let expr = distributionPriorityAndOr vars var a b c
+  let expr = distributionPriorityAndOr var a b c
   addFactorM (expr, [a, b, c, var])
   return var
 
@@ -77,8 +76,7 @@ orM = distributionTwoM distributionOr
 cspM :: Rational -> Int -> FaultTreeM Int
 cspM lambda a = do
   b <- newVariableM
-  vars <- ask
-  let expr = distributionCspLambda vars b lambda a
+  let expr = distributionCspLambda b lambda a
   addFactorM (expr, [a, b])
   return b
 
@@ -118,12 +116,12 @@ factorsEliminateVariable var factors = do
   tellFactors factors
   tell ["\\subsection{Integration of $x_{" ++ show (succ var) ++ "}$}", ""]
   let (varFactors, restFactors) = partition (elem var . snd) factors
-      expr = ExprN (Term (Atom 1 S.empty [] Nothing) (map fst varFactors))
+      expr = ExprN (Term (Atom 1 S.empty [] IM.empty) (map fst varFactors))
   tell ["\\begin{dmath*} " ++ "\\int\\limits_0^{+\\infty} "
         ++ texify expr ++ "\\textrm{dx}_{" ++ show (var + 1)
         ++ "} \\end{dmath*}"
        , "", "$$ = $$", ""]
-  newExpr <- integrateM expr var Zero Infinity
+  newExpr <- integrateM expr var (Constant 0) (Constant plusInfinity)
   let newVars = delete var . foldl union [] . map snd $ varFactors
   tell ["\\begin{dmath*} " ++ texify newExpr ++ "\\end{dmath*}", ""]
   return $ ((newExpr, newVars) : restFactors)
