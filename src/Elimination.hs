@@ -21,23 +21,23 @@ getNextVertex vs g = let costs = map (costFunctionMinFill g) vs
 
 addClique :: [Int] -> Graph -> Graph
 addClique [] = id
-addClique (v : vs) = foldr (.) id (map (addEdge v) vs) . addClique vs
+addClique (v : vs) = foldr ((.) . addEdge v) id vs . addClique vs
 
 addEdge :: Int -> Int -> Graph -> Graph
 addEdge a b | a == b = id 
-            | otherwise = IM.insertWith (\_ ns -> if elem b ns then ns else b : ns) a [b]
-              . IM.insertWith (\_ ns -> if elem a ns then ns else a : ns) b [a]
+            | otherwise = IM.insertWith (\_ ns -> if b `elem` ns then ns else b : ns) a [b]
+              . IM.insertWith (\_ ns -> if a `elem` ns then ns else a : ns) b [a]
 
 removeEdge :: Int -> Int -> Graph -> Graph
-removeEdge a b = IM.adjust (\ns -> delete b ns) a
-                 . IM.adjust (\ns -> delete a ns) b
+removeEdge a b = IM.adjust (delete b) a
+                 . IM.adjust (delete a) b
 
 removeVertex :: Int -> Graph -> Graph
 removeVertex v g = let ns = g IM.! v
-                   in IM.delete v . foldr (.) id (map (removeEdge v) ns) $ g
+                   in IM.delete v . foldr ((.) . removeEdge v) id ns $ g
 
 makeGraph :: [[Int]] -> Graph
-makeGraph cliques = foldr (.) id (map addClique cliques) IM.empty
+makeGraph cliques = foldr ((.) . addClique) id cliques IM.empty
 
 costFunctionMinFill :: Graph -> Int -> Int
 costFunctionMinFill g v =

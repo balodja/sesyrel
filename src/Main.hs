@@ -7,7 +7,8 @@ import Prelude hiding (Rational)
 
 import qualified Data.Set as S
 import qualified Data.IntMap.Strict as IM
-import Data.List (partition, union, delete, intersperse)
+import Data.List (partition, union, delete, intercalate)
+import Data.Maybe (fromMaybe)
 
 import Control.Monad.RWS
 import Control.Monad.Writer
@@ -102,10 +103,10 @@ faultTreeIntegrate :: MonadWriter [String] m =>
 faultTreeIntegrate mbOrder (FaultTree vars factors) =
   do
     tell ["Elimination order: " ++
-          concat (intersperse ", " $ map (show . succ) order), ""]
+          intercalate ", " (map (show . succ) order), ""]
     go factors order
   where
-    order = maybe (findOrdering [1 .. vars - 1] (map snd factors)) id mbOrder
+    order = fromMaybe (findOrdering [1 .. vars - 1] (map snd factors)) mbOrder
     go fs [] = return . fst . head $ fs
     go fs (v : vs) = do
               fs' <- factorsEliminateVariable v fs
@@ -124,12 +125,12 @@ factorsEliminateVariable var factors = do
   newExpr <- integrateM expr var (Constant 0) (Constant plusInfinity)
   let newVars = delete var . foldl union [] . map snd $ varFactors
   tell ["\\begin{dmath*} " ++ texify newExpr ++ "\\end{dmath*}", ""]
-  return $ ((newExpr, newVars) : restFactors)
+  return $ (newExpr, newVars) : restFactors
 
 main :: IO ()
 main = do
-  let doIt = (\(name, mbOrder, ftree) ->
-               faultTreeProcess name mbOrder (snd $ evalFaultTreeM ftree))
+  let doIt (name, mbOrder, ftree) =
+        faultTreeProcess name mbOrder (snd $ evalFaultTreeM ftree)
   writeFile "output.tex" . unlines . execWriter . mapM_ doIt $ trees
 
 trees :: [(String, Maybe [Int], FaultTreeM Int)]

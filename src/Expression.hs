@@ -110,13 +110,13 @@ instance Texifiable a => Texifiable (DiffSym a) where
   texify (DiffSym x y) = texify x ++ " - " ++ texify y
 
 texifyTerm :: (Num a, Ord a, Texifiable a) => Term a -> (Char, String)
-texifyTerm (Term a es) | isOne a && (not $ null exprs) = (fst (texifyAtom a), exprs)
+texifyTerm (Term a es) | isOne a && not (null exprs) = (fst (texifyAtom a), exprs)
                        | otherwise = (sign, atom ++ delimiter ++ exprs)
     where
       (sign, atom) = texifyAtom a
       isOne (Atom k ds us exp) = abs k == 1 && S.null ds && null us && F.all (== 0) exp
       delimiter = if null atom || null exprs then "" else " "
-      exprs = concat . intersperse " " $ texifyAndParen <$> es
+      exprs = unwords $ texifyAndParen <$> es
       texifyAndParen e@(ExprC _ _) = "\\left( " ++ texify e ++ " \\right)"
       texifyAndParen e@(ExprN _) = texify e
 
@@ -128,8 +128,8 @@ texifyAtom (Atom k deltas units exponent)
   | otherwise =
     (,) sign $
     (if absK == 1 then [] else texify absK)
-      ++ (concat . intersperse " " . map texifyDelta . S.toList $ deltas)
-      ++ (concat . intersperse " " . map texifyUnit $ units)
+      ++ (unwords . map texifyDelta . S.toList $ deltas)
+      ++ (unwords . map texifyUnit $ units)
       ++ texifyExponent (IM.map negate exponent)
         where
           absK = abs k
@@ -142,7 +142,7 @@ texifyAtom (Atom k deltas units exponent)
                              in if null vf then [] else "e^{" ++ vf ++ "}"
 
 texifyVarForm :: (Num a, Ord a, Texifiable a) => IntMap a -> String
-texifyVarForm = cutPlus . concat . map texifyVar . IM.toList
+texifyVarForm = cutPlus . concatMap texifyVar . IM.toList
   where
     texifyVar (n, v) | v == 0 = ""
                      | otherwise = sign v : (showNum v ++ "x_{" ++ show n ++ "}")
@@ -220,7 +220,7 @@ productTerm (Term a1 e1) (Term a2 e2) = Term (productAtom a1 a2) (e1 ++ e2)
 
 productAtom :: (Num a, Ord a) => Atom a -> Atom a -> Atom a
 productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
-  Atom (k1 * k2) (S.union d1 d2) (u1 ++ u2) (IM.unionWith (+) e1 e2)
+  Atom (k1 * k2) (d1 `S.union` d2) (u1 ++ u2) (IM.unionWith (+) e1 e2)
 
 calcMttf :: (Eq a, Fractional a) => Int -> Expr a -> a
 calcMttf var = sum . map mapTerm . toList
@@ -300,7 +300,7 @@ integrateAtom :: (RealInfinite a, Fractional a, Ord a) => Atom a -> Int -> Limit
 integrateAtom (Atom k ds us exp) var lo hi =
   fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> Just intExp
     where
-      intEqualLimits | lo == hi = Just $ [Atom 0 S.empty [] IM.empty]
+      intEqualLimits | lo == hi = Just [Atom 0 S.empty [] IM.empty]
                      | otherwise = Nothing
       
       intDelta = case findVar var ds of
