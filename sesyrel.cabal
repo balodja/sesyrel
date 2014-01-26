@@ -11,7 +11,7 @@ Cabal-Version:		>= 1.8
 --  Exposed-Modules:  Lib
 --  Build-Depends:	base >= 4, mtl >= 2, containers, vector
 
-Executable main
-  Main-is:		Main.hs
+Executable sesyrel
+  Main-is:		Sesyrel.hs
   Hs-Source-Dirs:	src
   Build-Depends:	base >= 4, mtl >= 2, containers

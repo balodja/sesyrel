@@ -1,4 +1,4 @@
-module Ratio (
+module Sesyrel.Expression.Ratio (
   Ratio,
   Rational,
   RealInfinite(..),

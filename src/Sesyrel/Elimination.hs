@@ -1,4 +1,4 @@
-module Elimination (findOrdering) where
+module Sesyrel.Elimination (findOrdering) where
 
 import Data.List (delete, elemIndex)
 import Data.Maybe (fromJust)

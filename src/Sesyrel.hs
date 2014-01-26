@@ -1,8 +1,7 @@
 {-# LANGUAGE RecursiveDo, FlexibleContexts #-}
 
-import Expression
-import Elimination (findOrdering)
-import Ratio
+import Sesyrel.Expression
+import Sesyrel.Elimination
 import Prelude hiding (Rational)
 
 import qualified Data.Set as S
@@ -74,12 +73,14 @@ priorityAndOrM a b c = do
 orM :: Int -> Int -> FaultTreeM Int
 orM = distributionTwoM distributionOr
 
+{-
 cspM :: Rational -> Int -> FaultTreeM Int
 cspM lambda a = do
   b <- newVariableM
   let expr = distributionCspLambda b lambda a
   addFactorM (expr, [a, b])
   return b
+-}
 
 tellFactors :: MonadWriter [String] m => [Factor] -> m ()
 tellFactors factors = do
