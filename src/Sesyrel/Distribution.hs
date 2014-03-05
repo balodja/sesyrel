@@ -102,7 +102,7 @@ factorsEliminate elims algo factors =
   do
     let order = if algo then findOrdering elims (map snd factors) else elims
     tell ["Elimination order: " ++
-          intercalate ", " (map (show . succ) order), ""]
+          intercalate ", " (map show order), ""]
     go factors order
   where
     go fs [] = return fs
@@ -118,7 +118,7 @@ factorsMarginalize margs factors =
 factorsEliminateVariable :: MonadWriter [String] m => Int -> [Factor] -> m [Factor]
 factorsEliminateVariable var factors = do
   factorsTell factors
-  tell ["\\subsection{Integration of $x_{" ++ show (succ var) ++ "}$}", ""]
+  tell ["\\subsection{Integration of $x_{" ++ show var ++ "}$}", ""]
   let (varFactors, restFactors) = partition (elem var . snd) factors
       expr = ExprN (Term (Atom 1 S.empty [] IM.empty) (map fst varFactors))
   tell ["\\begin{dmath*} " ++ "\\int\\limits_0^{+\\infty} "
