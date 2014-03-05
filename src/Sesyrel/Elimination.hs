@@ -1,10 +1,12 @@
 module Sesyrel.Elimination (findOrdering) where
 
 import Data.List (delete, elemIndex)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IM
+
+import Debug.Trace (trace)
 
 type Graph = IntMap [Int]
 
@@ -41,7 +43,7 @@ makeGraph cliques = foldr ((.) . addClique) id cliques IM.empty
 
 costFunctionMinFill :: Graph -> Int -> Int
 costFunctionMinFill g v =
-  let neighs = g IM.! v
+  let neighs = fromMaybe [] (IM.lookup v g)
       n = length neighs
       edge n = map ((,) n) $ g IM.! n
       inClique ns (a, b) = elem a neighs && elem b neighs
