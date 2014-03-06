@@ -59,7 +59,7 @@ texifyTerm (Term a es) | isOne a && not (null exprs) = (fst (texifyAtom a), expr
       isOne (Atom k ds us exp) = abs k == 1 && S.null ds && null us && F.all (== 0) exp
       delimiter = if null atom || null exprs then "" else " \\cdot "
       exprs = intercalate " \\cdot " $ texifyAndParen <$> es
-      texifyAndParen e@(ExprC _ _) = "\\left( " ++ texify e ++ " \\right)"
+      texifyAndParen e@(ExprC _ _) = "\\big[ " ++ texify e ++ " \\big]"
       texifyAndParen e@(ExprN _) = texify e
 
 texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, String)
