@@ -23,7 +23,8 @@ import Prelude hiding (product, Rational)
 import Data.List (intercalate, nub, sort, union, partition, delete, (\\))
 
 import qualified Data.Set as S (null, empty)
-import qualified Data.IntMap.Strict as IM (delete, (!), singleton, fromList, empty)
+import qualified Data.IntMap.Strict as IM (delete, lookup, singleton, fromList, empty)
+import Data.Maybe (fromMaybe)
 import qualified Data.Foldable as F (all)
 
 type Factor = (Expr Rational, [Int])
@@ -33,7 +34,7 @@ calcMttf var = sum . map mapTerm . toList
   where
     checkAtom (Atom _ ds us exp) =
       S.null ds && null us && F.all (== 0) (IM.delete var exp)
-    mapTerm (Term a@(Atom k _ _ exp) []) | checkAtom a = k / (exp IM.! var) ^ 2
+    mapTerm (Term a@(Atom k _ _ exp) []) | checkAtom a = k / (fromMaybe (error "calcMttf: lookup fail") (IM.lookup var exp)) ^ 2
                                          | otherwise =
                                            error "calcMttf: too complex expr"
 
@@ -88,12 +89,12 @@ factorsSimpleProcess name vv joint = do
               (\vs -> factorsMarginalize vs joint)
               (\vs -> factorsEliminate vs False joint) vv
   constant <- factorsMarginalize [] marginal
-  let p = foldl1 product $ map fst constant
+  let p = deepExpand . foldl1 product .  map fst $ constant
   tell ["\\subsection{Results}", ""]
   tell ["$$ p(F) = " ++ texify p ++ " $$", ""]
   case vv of
     Left [lastVar] -> do
-      let mttf = calcMttf lastVar (foldl1 product $ map fst marginal)
+      let mttf = calcMttf lastVar (deepExpand . foldl1 product . map fst $ marginal)
       tell ["$$ MTTF = " ++ texify mttf ++ " $$", ""]
     _ -> return ()
 

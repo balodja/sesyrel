@@ -12,11 +12,11 @@ import Control.Applicative ((<|>))
 import Control.Monad.Writer (MonadWriter, runWriter, tell, liftM)
 
 import Data.List (delete)
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, fromMaybe)
 import Sesyrel.Expression.Ratio (RealInfinite(..))
 
 import qualified Data.Set as S (empty, delete)
-import qualified Data.IntMap.Strict as IM (empty, (!))
+import qualified Data.IntMap.Strict as IM (empty, lookup)
 import qualified Data.Foldable as F (Foldable, find)
 
 type Limit a = Symbol a
@@ -73,7 +73,7 @@ integrateAtom (Atom k ds us exp) var lo hi =
           higher y@(Constant c) | c == plusInfinity = []
                                 | otherwise = [DiffSym y vec]
 
-      intExp = let lambda = exp IM.! var
+      intExp = let lambda = fromMaybe (error "integrateAtom: intExp failed") (IM.lookup var exp)
                    subLimit a (Constant c)
                      | c == plusInfinity = Atom 0 S.empty [] IM.empty
                      | c == 0 = substituteAtom var (Constant 0) a

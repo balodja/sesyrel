@@ -8,6 +8,7 @@ import Control.Applicative ((<$>))
 
 import Sesyrel.Expression.Ratio (Ratio, RealInfinite(..), numerator, denominator)
 
+import Data.List (intercalate)
 import qualified Data.Set as S (null, toList)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM (map, toList)
@@ -56,8 +57,8 @@ texifyTerm (Term a es) | isOne a && not (null exprs) = (fst (texifyAtom a), expr
     where
       (sign, atom) = texifyAtom a
       isOne (Atom k ds us exp) = abs k == 1 && S.null ds && null us && F.all (== 0) exp
-      delimiter = if null atom || null exprs then "" else " "
-      exprs = unwords $ texifyAndParen <$> es
+      delimiter = if null atom || null exprs then "" else " \\cdot "
+      exprs = intercalate " \\cdot " $ texifyAndParen <$> es
       texifyAndParen e@(ExprC _ _) = "\\left( " ++ texify e ++ " \\right)"
       texifyAndParen e@(ExprN _) = texify e
 

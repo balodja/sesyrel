@@ -35,7 +35,7 @@ removeEdge a b = IM.adjust (delete b) a
                  . IM.adjust (delete a) b
 
 removeVertex :: Int -> Graph -> Graph
-removeVertex v g = let ns = g IM.! v
+removeVertex v g = let ns = fromMaybe [] (IM.lookup v g)
                    in IM.delete v . foldr ((.) . removeEdge v) id ns $ g
 
 makeGraph :: [[Int]] -> Graph
