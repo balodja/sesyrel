@@ -98,3 +98,24 @@ escalatorFaultTree2 = do
   section2 <- escalatorSectionM hydro1 hydro3
   t <- andM section1 section2
   return [t]
+
+hydrosystemsM :: FaultTreeM [Int]
+hydrosystemsM = do
+  [tank1, tank2] <- replicateM 2 (lambdaM 30)
+  [engine1, engine2] <- replicateM 2 (lambdaM 282)
+  [electroGrp1, electroGrp2] <- replicateM 2 (lambdaM 1060)
+  [hydroPump1, hydroPump2] <- replicateM 2 (lambdaM 125)
+  electromotors <- replicateM 2 (lambdaM 100)
+  pumpStations <- replicateM 2 (lambdaM 567)
+  mechanics1 <- orM tank1 engine1
+  mechanics2 <- orM tank2 engine2
+  electroSys1 <- orM mechanics1 electroGrp1
+  electroSys2 <- orM mechanics2 electroGrp2
+  electroSys <- andM electroSys1 electroSys2
+  hydro1Main <- orM hydroPump1 mechanics1
+  hydro2Main <- orM hydroPump1 mechanics1
+  hydro1Res <- orM electroSys (electromotors !! 0) >>= orM (pumpStations !! 0)
+  hydro2Res <- orM electroSys (electromotors !! 1) >>= orM (pumpStations !! 1)
+  hydro1 <- andM hydro1Main hydro1Res
+  hydro2 <- andM hydro2Main hydro2Res
+  return [hydro1, hydro2]
