@@ -20,7 +20,7 @@ import Sesyrel.Elimination
 import Control.Monad.Writer
 
 import Prelude hiding (product, Rational)
-import Data.List (intercalate, nub, sort, union, partition, delete, (\\))
+import Data.List (intercalate, intersperse, nub, sort, union, partition, delete, (\\))
 
 import qualified Data.Set as S (null, empty)
 import qualified Data.IntMap.Strict as IM (delete, lookup, singleton, fromList, empty)
@@ -79,8 +79,8 @@ distributionPriorityAndOr x a b c =
 factorsTell :: MonadWriter [String] m => [Factor] -> m ()
 factorsTell factors = do
   tell ["\\subsection{Factors}", ""]
-  forM_ factors $
-    \(expr, _) -> tell ["\\begin{dmath*} " ++ texify expr ++ "\\end{dmath*}", ""]
+  let fellers = map (\(expr, _) -> tell ["$ " ++ texify expr ++ " $"]) factors
+  sequence_ (intersperse (tell [","]) fellers)
 
 factorsSimpleProcess :: MonadWriter [String] m => String -> Either [Int] [Int] -> [Factor] -> m ()
 factorsSimpleProcess name vv joint = do
@@ -88,15 +88,17 @@ factorsSimpleProcess name vv joint = do
   marginal <- either
               (\vs -> factorsMarginalize vs joint)
               (\vs -> factorsEliminate vs False joint) vv
+  tell ["\\subsection{More elimination?}", ""]
   constant <- factorsMarginalize [] marginal
   let p = deepExpand . foldl1 product .  map fst $ constant
   tell ["\\subsection{Results}", ""]
-  tell ["$$ p(F) = " ++ texify p ++ " $$", ""]
+  tell ["$ p(F) = " ++ texify p ++ " $"]
   case vv of
     Left [lastVar] -> do
       let mttf = calcMttf lastVar (deepExpand . foldl1 product . map fst $ marginal)
-      tell ["$$ MTTF = " ++ texify mttf ++ " $$", ""]
+      tell [", $ MTTF = " ++ texify mttf ++ " $"]
     _ -> return ()
+  tell [""]
 
 factorsEliminate :: MonadWriter [String] m => [Int] -> Bool -> [Factor] -> m [Factor]
 factorsEliminate elims algo factors =
@@ -122,11 +124,10 @@ factorsEliminateVariable var factors = do
   tell ["\\subsection{Integration of $x_{" ++ show var ++ "}$}", ""]
   let (varFactors, restFactors) = partition (elem var . snd) factors
       expr = ExprN (Term (Atom 1 S.empty [] IM.empty) (map fst varFactors))
-  tell ["\\begin{dmath*} " ++ "\\int\\limits_0^{+\\infty} "
-        ++ texify expr ++ "\\textrm{dx}_{" ++ show (var + 1)
-        ++ "} \\end{dmath*}"
-       , "", "$$ = \\ldots $$", ""]
+  tell ["$ " ++ "\\int\\limits_0^{+\\infty} "
+        ++ texify expr ++ "\\textrm{dx}_{" ++ show var
+        ++ "} = \\ldots $", ""]
   newExpr <- integrateM expr var (Constant 0) (Constant plusInfinity)
   let newVars = delete var . foldl union [] . map snd $ varFactors
-  tell ["\\begin{dmath*} \\ldots = " ++ texify newExpr ++ "\\end{dmath*}", ""]
+  tell ["", "\\paragraph{Integration result}", "$ \\ldots = " ++ texify newExpr ++ " $", ""]
   return $ (newExpr, newVars) : restFactors

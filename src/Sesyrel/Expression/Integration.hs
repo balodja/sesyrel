@@ -32,9 +32,9 @@ integrateM expr var lo hi = do
         let result = integrateAtom atom var lo hi
             exprBefore = ExprN (Term atom [])
             exprAfter = fromList [Term a [] | a <- result]
-        tell ["\\begin{dmath*} " ++ "\\int\\limits_0^{+\\infty} "
-              ++ texify exprBefore ++ "\\textrm{dx}_{" ++ show (var + 1)
-              ++ "} = " ++ texify exprAfter ++ "\\end{dmath*}", ""]
+        tell ["$ " ++ "\\int\\limits_0^{+\\infty} "
+              ++ texify exprBefore ++ "\\textrm{dx}_{" ++ show var
+              ++ "} = " ++ texify exprAfter ++ " $", "", ""]
         return result
   atoms' <- liftM concat . mapM integrateTermM . toList . deepExpand $ expr
   let atoms = filterAtoms . groupifyAtoms . filterAtoms . map cancelUsAtom $ atoms'
