@@ -25,7 +25,7 @@ import qualified Prelude as Prelude (product)
 
 import Data.Set (Set)
 import qualified Data.Set as S
-  (map, empty, null, union, singleton, delete, insert)
+  (map, empty, null, union, singleton, delete, insert, fromList, toList)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM
   (empty, delete, insert, findWithDefault, unionWith)
@@ -153,7 +153,7 @@ productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
 makeSingle :: (Ord a, Bundle b) => Int -> Int -> b a
 makeSingle a b = singletonBundle (DiffSym (Variable a) (Variable b))
 
-cancelUsAtom :: (Fractional a, Eq a) => Atom a -> Atom a
+cancelUsAtom :: (Fractional a, Ord a) => Atom a -> Atom a
 cancelUsAtom (Atom k1 ds us exp) = let (k2, us') = cancelUnits us
                                    in Atom (k1 * k2) ds us' exp
 
@@ -175,6 +175,8 @@ class Bundle e where
   emptyBundle :: e a
   nullBundle :: e a -> Bool
   unionBundle :: Ord a => e a -> e a -> e a
+  toListBundle :: e a -> [DiffSym a]
+  fromListBundle :: Ord a => [DiffSym a] -> e a
   insertDiff :: Ord a => DiffSym a -> e a -> e a
   deleteDiff :: Ord a => DiffSym a -> e a -> e a
   findDiff :: (Ord a, Eq a) => Int -> e a -> Maybe (DiffSym a)
@@ -192,6 +194,8 @@ instance Bundle DeltaBundle where
   emptyBundle = DeltaBundle S.empty
   nullBundle (DeltaBundle ds) = S.null ds
   unionBundle (DeltaBundle a) (DeltaBundle b) = DeltaBundle $ S.union a b
+  toListBundle (DeltaBundle ds) = S.toList ds
+  fromListBundle ds = DeltaBundle $ S.fromList ds
   insertDiff d (DeltaBundle ds) = DeltaBundle $ S.insert d ds
   deleteDiff d (DeltaBundle ds) = DeltaBundle $ S.delete d ds
   findDiff var =
@@ -215,15 +219,17 @@ instance Bundle UnitBundle where
   emptyBundle = UnitBundle []
   nullBundle (UnitBundle us) = null us
   unionBundle (UnitBundle a) (UnitBundle b) = UnitBundle (a ++ b)
+  toListBundle (UnitBundle us) = us
+  fromListBundle us = UnitBundle us
   insertDiff u (UnitBundle us) = UnitBundle $ u : us
   deleteDiff u (UnitBundle us) = UnitBundle $ delete u us
   findDiff var =
     F.find (\(DiffSym a b) -> a == Variable var || b == Variable var) . getUnitBundle
 
-cancelUnits :: (Eq a, Fractional a) => UnitBundle a -> (a, UnitBundle a)
-cancelUnits (UnitBundle us) =
-  case partitionEithers . map separate $ us of
-    (ks, us') -> (Prelude.product ks, UnitBundle us')
+cancelUnits :: (Ord a, Fractional a) => UnitBundle a -> (a, UnitBundle a)
+cancelUnits us =
+  case partitionEithers . map separate . toListBundle $ us of
+    (ks, us') -> (Prelude.product ks, fromListBundle us')
     where
       separate (DiffSym (Variable _) (Constant 0)) = Left 1
       separate (DiffSym (Constant 0) (Variable _)) = Left 0

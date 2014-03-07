@@ -9,7 +9,6 @@ import Control.Applicative ((<$>))
 import Sesyrel.Expression.Ratio (Ratio, RealInfinite(..), numerator, denominator)
 
 import Data.List (intercalate)
-import qualified Data.Set as S (null, toList)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM (map, toList)
 import qualified Data.Foldable as F (all)
@@ -56,22 +55,22 @@ texifyTerm (Term a es) | isOne a && not (null exprs) = (fst (texifyAtom a), expr
                        | otherwise = (sign, atom ++ delimiter ++ exprs)
     where
       (sign, atom) = texifyAtom a
-      isOne (Atom k (DeltaBundle ds) (UnitBundle us) exp) = abs k == 1 && S.null ds && null us && F.all (== 0) exp
+      isOne (Atom k ds us exp) = abs k == 1 && nullBundle ds && nullBundle us && F.all (== 0) exp
       delimiter = if null atom || null exprs then "" else " \\cdot "
       exprs = intercalate " \\cdot " $ texifyAndParen <$> es
       texifyAndParen e@(ExprC _ _) = "\\big[ " ++ texify e ++ " \\big]"
       texifyAndParen e@(ExprN _) = texify e
 
 texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, String)
-texifyAtom (Atom k (DeltaBundle deltas) (UnitBundle units) exponent)
-  | S.null deltas
-    && null units
+texifyAtom (Atom k deltas units exponent)
+  | nullBundle deltas
+    && nullBundle units
     && F.all (== 0) exponent = (sign, texify absK)
   | otherwise =
     (,) sign $
     (if absK == 1 then [] else texify absK)
-      ++ (unwords . map texifyDelta . S.toList $ deltas)
-      ++ (unwords . map texifyUnit $ units)
+      ++ (unwords . map texifyDelta . toListBundle $ deltas)
+      ++ (unwords . map texifyUnit . toListBundle $ units)
       ++ texifyExponent (IM.map negate exponent)
         where
           absK = abs k
