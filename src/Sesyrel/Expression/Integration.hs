@@ -11,13 +11,10 @@ import Sesyrel.Expression.Texify
 import Control.Applicative ((<|>))
 import Control.Monad.Writer (MonadWriter, runWriter, tell, liftM)
 
-import Data.List (delete)
 import Data.Maybe (fromJust, fromMaybe)
 import Sesyrel.Expression.Ratio (RealInfinite(..))
 
-import qualified Data.Set as S (empty, delete)
 import qualified Data.IntMap.Strict as IM (empty, lookup)
-import qualified Data.Foldable as F (Foldable, find)
 
 type Limit a = Symbol a
 
@@ -44,16 +41,16 @@ integrateAtom :: (RealInfinite a, Fractional a, Ord a) => Atom a -> Int -> Limit
 integrateAtom (Atom k ds us exp) var lo hi =
   fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> Just intExp
     where
-      intEqualLimits | lo == hi = Just [Atom 0 S.empty [] IM.empty]
+      intEqualLimits | lo == hi = Just [Atom 0 emptyBundle emptyBundle IM.empty]
                      | otherwise = Nothing
       
-      intDelta = case findVar var ds of
+      intDelta = case findDiff var ds of
         Nothing -> Nothing
         Just d ->
           let sym = calcSubstitution d
               us1 = calcDeltaUnits sym
-              a = Atom k (S.delete d ds) (us1 ++ us) exp
-          in Just [substituteAtom var sym a]
+              a = Atom k (deleteDiff d ds) (unionBundle us1 us) exp
+          in Just [substitute var sym a]
       
       calcSubstitution (DiffSym (Variable x) (Variable y))
         | x == var = Variable y
@@ -67,53 +64,50 @@ integrateAtom (Atom k ds us exp) var lo hi =
         | otherwise = error "calcSubstitution: unexpected vars"
       calcSubstitution _ = error "calcSubstitution: unexpected vars"
 
-      calcDeltaUnits vec = DiffSym vec lo : higher hi
+      calcDeltaUnits vec = DiffSym vec lo `insertDiff` higher hi
         where
-          higher y@(Variable _) = [DiffSym y vec]
-          higher y@(Constant c) | c == plusInfinity = []
-                                | otherwise = [DiffSym y vec]
+          higher y@(Variable _) = singletonBundle (DiffSym y vec)
+          higher y@(Constant c) | c == plusInfinity = emptyBundle
+                                | otherwise = singletonBundle (DiffSym y vec)
 
       intExp = let lambda = fromMaybe (error "integrateAtom: intExp failed") (IM.lookup var exp)
                    subLimit a (Constant c)
-                     | c == plusInfinity = Atom 0 S.empty [] IM.empty
-                     | c == 0 = substituteAtom var (Constant 0) a
+                     | c == plusInfinity = Atom 0 emptyBundle emptyBundle IM.empty
+                     | c == 0 = substitute var (Constant 0) a
                      | otherwise = error "intExp: strange constant in limits"
-                   subLimit a sym = substituteAtom var sym a
+                   subLimit a sym = substitute var sym a
                in [ subLimit (Atom (-k / lambda) ds us exp) hi
                   , subLimit (Atom (k / lambda) ds us exp) lo
                   ]
       
-      intUnit = case findVar var us of
+      intUnit = case findDiff var us of
         Nothing -> Nothing
-        Just u -> Just $ intUnit' u (delete u us)
+        Just u -> Just $ intUnit' u (deleteDiff u us)
       intUnit' (DiffSym x y) us | x == Variable var =
         case hi of
           Constant c | c == plusInfinity ->
-            let us1 = DiffSym y lo : us
-                us2 = DiffSym lo y : us
+            let us1 = DiffSym y lo `insertDiff` us
+                us2 = DiffSym lo y `insertDiff` us
             in integrateAtom (Atom k ds us1 exp) var y (Constant c)
                ++ integrateAtom (Atom k ds us2 exp) var lo (Constant c)
                      | otherwise -> error "integrateAtom: const at higher limit? no wai"
           higherLimit ->
             let u1 = DiffSym higherLimit y
                 u2 = DiffSym y lo
-                us1 = u1 : (u2 : us)
-                us2 = DiffSym lo y : us
+                us1 = u1 `insertDiff` (u2 `insertDiff` us)
+                us2 = DiffSym lo y `insertDiff` us
             in integrateAtom (Atom k ds us1 exp) var y hi
                ++ integrateAtom (Atom k ds us2 exp) var lo hi
                        | otherwise =
         case hi of
           Constant c | c == plusInfinity ->
-            let us1 = DiffSym x lo : us
+            let us1 = DiffSym x lo `insertDiff` us
             in integrateAtom (Atom k ds us1 exp) var lo x
                      | otherwise -> error "integrateAtom: const at higher limit? no wai"
           higherLimit ->
             let u1 = DiffSym x lo
                 u2 = DiffSym higherLimit x
-                us1 = u1 : (u2 : us)
-                us2 = DiffSym x higherLimit : us
+                us1 = u1 `insertDiff` (u2 `insertDiff` us)
+                us2 = DiffSym x higherLimit `insertDiff` us
             in integrateAtom (Atom k ds us1 exp) var lo x
                ++ integrateAtom (Atom k ds us2 exp) var lo hi
-
-findVar :: (F.Foldable f, Eq a) => Int -> f (DiffSym a) -> Maybe (DiffSym a)
-findVar var = F.find (\(DiffSym a b) -> a == Variable var || b == Variable var)

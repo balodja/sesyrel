@@ -22,7 +22,6 @@ import Control.Monad.Writer
 import Prelude hiding (product, Rational)
 import Data.List (intercalate, intersperse, nub, sort, union, partition, delete, (\\))
 
-import qualified Data.Set as S (null, empty)
 import qualified Data.IntMap.Strict as IM (delete, lookup, singleton, fromList, empty)
 import Data.Maybe (fromMaybe)
 import qualified Data.Foldable as F (all)
@@ -33,7 +32,7 @@ calcMttf :: (Eq a, Fractional a) => Int -> Expr a -> a
 calcMttf var = sum . map mapTerm . toList
   where
     checkAtom (Atom _ ds us exp) =
-      S.null ds && null us && F.all (== 0) (IM.delete var exp)
+      nullBundle ds && nullBundle us && F.all (== 0) (IM.delete var exp)
     mapTerm (Term a@(Atom k _ _ exp) []) | checkAtom a = k / (fromMaybe (error "calcMttf: lookup fail") (IM.lookup var exp)) ^ 2
                                          | otherwise =
                                            error "calcMttf: too complex expr"
@@ -41,39 +40,39 @@ calcMttf var = sum . map mapTerm . toList
 distributionLambda :: Num a => Int -> a -> Expr a
 distributionLambda variable lambda =
   let exp = IM.singleton variable lambda
-  in ExprN $ Term (Atom lambda S.empty [] exp) []
+  in ExprN $ Term (Atom lambda emptyBundle emptyBundle exp) []
 
 -- should not be used
-distributionCspLambda :: Num a => Int -> a -> Int -> Expr a
+distributionCspLambda :: (Num a, Ord a) => Int -> a -> Int -> Expr a
 distributionCspLambda varB lambda varA =
   let exp = IM.fromList [(varA, lambda), (varB, -lambda)]
-  in ExprN $ Term (Atom lambda S.empty (makeSingleU varB varA) exp) []
+  in ExprN $ Term (Atom lambda emptyBundle (makeSingle varB varA) exp) []
 
 distributionAnd :: (Num a, Ord a) => Int -> Int -> Int -> Expr a
 distributionAnd x a b =
-  let a1 = Atom 1 (makeSingleD x b) (makeSingleU b a) IM.empty
-      a2 = Atom 1 (makeSingleD x a) (makeSingleU a b) IM.empty
+  let a1 = Atom 1 (makeSingle x b) (makeSingle b a) IM.empty
+      a2 = Atom 1 (makeSingle x a) (makeSingle a b) IM.empty
   in normalizeDs $ ExprC (Term a1 []) (ExprN (Term a2 []))
 
 distributionOr :: (Num a, Ord a) => Int -> Int -> Int -> Expr a
 distributionOr x a b =
-  let a1 = Atom 1 (makeSingleD x a) (makeSingleU b a) IM.empty
-      a2 = Atom 1 (makeSingleD x b) (makeSingleU a b) IM.empty
+  let a1 = Atom 1 (makeSingle x a) (makeSingle b a) IM.empty
+      a2 = Atom 1 (makeSingle x b) (makeSingle a b) IM.empty
   in normalizeDs $ ExprC (Term a1 []) (ExprN (Term a2 []))
 
 -- should not be used
 distributionPriorityAnd :: (Num a, Ord a) => Int -> Int -> Int -> Expr a
 distributionPriorityAnd x a b =
-  let atom = Atom 1 (makeSingleD x b) (makeSingleU b a) IM.empty
+  let atom = Atom 1 (makeSingle x b) (makeSingle b a) IM.empty
   in normalizeDs $ ExprN (Term atom [])
 
 distributionPriorityAndOr :: (Num a, Ord a) => Int -> Int -> Int -> Int -> Expr a
 distributionPriorityAndOr x a b c =
-  let us1 = makeSingleU b a ++ makeSingleU c b
-      us2 = makeSingleU b a ++ makeSingleU b c
-      a1 = Atom 1 (makeSingleD x b) us1 IM.empty
-      a2 = Atom 1 (makeSingleD x c) us2 IM.empty
-      a3 = Atom 1 (makeSingleD x c) (makeSingleU a b) IM.empty
+  let us1 = makeSingle b a `unionBundle` makeSingle c b
+      us2 = makeSingle b a `unionBundle` makeSingle b c
+      a1 = Atom 1 (makeSingle x b) us1 IM.empty
+      a2 = Atom 1 (makeSingle x c) us2 IM.empty
+      a3 = Atom 1 (makeSingle x c) (makeSingle a b) IM.empty
   in normalizeDs $ fromList [Term a1 [], Term a2 [], Term a3 []]
 
 factorsTell :: MonadWriter [String] m => [Factor] -> m ()
@@ -123,7 +122,7 @@ factorsEliminateVariable var factors = do
   factorsTell factors
   tell ["\\subsection{Integration of $x_{" ++ show var ++ "}$}", ""]
   let (varFactors, restFactors) = partition (elem var . snd) factors
-      expr = ExprN (Term (Atom 1 S.empty [] IM.empty) (map fst varFactors))
+      expr = ExprN (Term (Atom 1 emptyBundle emptyBundle IM.empty) (map fst varFactors))
   tell ["$ " ++ "\\int\\limits_0^{+\\infty} "
         ++ texify expr ++ "\\textrm{dx}_{" ++ show var
         ++ "} = \\ldots $", ""]

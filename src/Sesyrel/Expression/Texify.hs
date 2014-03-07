@@ -56,14 +56,14 @@ texifyTerm (Term a es) | isOne a && not (null exprs) = (fst (texifyAtom a), expr
                        | otherwise = (sign, atom ++ delimiter ++ exprs)
     where
       (sign, atom) = texifyAtom a
-      isOne (Atom k ds us exp) = abs k == 1 && S.null ds && null us && F.all (== 0) exp
+      isOne (Atom k (DeltaBundle ds) (UnitBundle us) exp) = abs k == 1 && S.null ds && null us && F.all (== 0) exp
       delimiter = if null atom || null exprs then "" else " \\cdot "
       exprs = intercalate " \\cdot " $ texifyAndParen <$> es
       texifyAndParen e@(ExprC _ _) = "\\big[ " ++ texify e ++ " \\big]"
       texifyAndParen e@(ExprN _) = texify e
 
 texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, String)
-texifyAtom (Atom k deltas units exponent)
+texifyAtom (Atom k (DeltaBundle deltas) (UnitBundle units) exponent)
   | S.null deltas
     && null units
     && F.all (== 0) exponent = (sign, texify absK)
