@@ -25,16 +25,22 @@ integrateM :: (RealInfinite a, Fractional a, Ord a, Texifiable a, MonadWriter [S
 integrateM expr var lo hi = do
   let filterAtoms = filter (\(Atom k _ _ _) -> k /= 0)
       integrateTermM (Term atom _) = do
-        tell ["\\paragraph{Atom}", ""]
-        let result = integrateAtom atom var lo hi
+        tell ["\\paragraph{Atom}"]
+        let integrated = integrateAtom atom var lo hi
+            simplified = filterAtoms . map cancelUsAtom $ integrated
             exprBefore = ExprN (Term atom [])
-            exprAfter = fromList [Term a [] | a <- result]
-        tell ["$ " ++ "\\int\\limits_0^{+\\infty} "
-              ++ texify exprBefore ++ "\\textrm{dx}_{" ++ show var
-              ++ "} = " ++ texify exprAfter ++ " $", "", ""]
-        return result
+            exprDuring = fromList [Term a [] | a <- integrated]
+            exprAfter = fromList [Term a [] | a <- simplified]
+        tell [ "$"
+             , "\\int\\limits_0^{+\\infty} "
+               ++ texify exprBefore ++ "\\textrm{dx}_{" ++ show var
+               ++ "}"
+             , "= " ++ texify exprDuring
+             , "= " ++ texify exprAfter
+             , "$", ""]
+        return simplified
   atoms' <- liftM concat . mapM integrateTermM . toList . deepExpand $ expr
-  let atoms = filterAtoms . groupifyAtoms . filterAtoms . map cancelUsAtom $ atoms'
+  let atoms = filterAtoms . groupifyAtoms $ atoms'
   return $ fromList [Term a [] | a <- atoms]
 
 integrateAtom :: (RealInfinite a, Fractional a, Ord a) => Atom a -> Int -> Limit a -> Limit a -> [Atom a]
