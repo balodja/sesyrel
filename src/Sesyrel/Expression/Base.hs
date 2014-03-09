@@ -107,12 +107,12 @@ toList :: Expr a -> [Term a]
 toList (ExprC t e) = t : toList e
 toList (ExprN t) = [t]
 
-fromList :: [Term a] -> Expr a
+fromList :: Num a => [Term a] -> Expr a
 fromList (t : []) = ExprN t
 fromList (t : ts) = ExprC t (fromList ts)
-fromList [] = error "fromList: term list is empty"
+fromList [] = ExprN (Term (Atom 0 emptyBundle emptyBundle IM.empty) [])
 
-mapExpr :: (Term a -> Term a) -> Expr a -> Expr a
+mapExpr :: Num a => (Term a -> Term a) -> Expr a -> Expr a
 mapExpr f = fromList . map f . toList
 
 normalizeDs :: (Num a, Ord a) => Expr a -> Expr a
