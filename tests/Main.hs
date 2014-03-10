@@ -1,6 +1,8 @@
 module Main where
 
-import Test.QuickCheck
+import Test.QuickCheck (Arbitrary(..), choose, elements)
+import Test.Framework.Providers.QuickCheck2 (testProperty)
+import Test.Framework (Test, testGroup, defaultMain)
 
 import Control.Applicative ((<$>))
 import Control.Monad (join, foldM)
@@ -57,5 +59,9 @@ prop_completeness def = (== exprOne) . deepExpand . foldl1 product . map fst . f
     FaultTree num factors = makeFaultTree def
     exprOne = ExprN (Term (Atom 1 emptyBundle emptyBundle IM.empty) [])
 
+tests_completeness :: Test
+tests_completeness = testGroup "Complete integral over distributions should be equal to one"
+                     [ testProperty "large random distributions" prop_completeness ]
+
 main :: IO ()
-main = quickCheck prop_completeness
+main = defaultMain [ tests_completeness ]
