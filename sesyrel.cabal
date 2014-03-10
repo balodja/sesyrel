@@ -15,3 +15,8 @@ Executable sesyrel
   Main-is:		Sesyrel.hs
   Hs-Source-Dirs:	src
   Build-Depends:	base >= 4, mtl >= 2, containers
+
+Executable sesyrel_tests
+  Main-is:		Test.hs
+  Hs-Source-Dirs:	tests, src
+  Build-Depends:	QuickCheck >= 2, base >= 4, mtl >= 2, containers
