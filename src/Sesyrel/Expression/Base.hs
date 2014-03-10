@@ -153,18 +153,9 @@ productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
 makeSingle :: (Ord a, Bundle b) => Int -> Int -> b a
 makeSingle a b = singletonBundle (DiffSym (Variable a) (Variable b))
 
-cancelUsAtom :: (Fractional a, Ord a, RealInfinite a) => Atom a -> Atom a
-cancelUsAtom (Atom k1 ds us exp) =
-  let go k (d@(DiffSym (Variable v) s) : ds) us exp =
-        let sbstn = substitute v s
-            (k', exp') = substituteExp v s exp
-            (k'', ds', us', exp'') = go k' (map sbstn ds) (map sbstn us) exp'
-        in (k'' * k, d : ds', us', exp'')
-      go k [] us exp = (k, [], us, exp)
-      go _ _ us _ = error "calcelUsAtom: something strange happened"
-      (k2, ds', us', exp') = go 1 (toListBundle ds) (toListBundle us) exp
-      (k3, us'') = cancelUnits (fromListBundle us')
-  in Atom (k1 * k2 * k3) (fromListBundle ds') us'' exp'
+cancelUsAtom :: (Fractional a, Ord a) => Atom a -> Atom a
+cancelUsAtom (Atom k1 ds us exp) = let (k2, us') = cancelUnits us
+                                   in Atom (k1 * k2) ds us' exp
 
 groupifyAtoms :: (Eq a, Num a) => [Atom a] -> [Atom a]
 groupifyAtoms [] = []
@@ -212,7 +203,7 @@ instance Bundle DeltaBundle where
 
 normalizeDelta :: DiffSym a -> DiffSym a
 normalizeDelta d@(DiffSym (Variable ix) (Variable iy))
-  | ix > iy = d
+  | ix < iy = d
   | otherwise = DiffSym (Variable iy) (Variable ix)
 normalizeDelta d@(DiffSym c@(Constant _) i@(Variable _))
       = DiffSym i c
