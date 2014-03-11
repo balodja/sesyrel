@@ -8,6 +8,8 @@ import Control.Applicative ((<$>))
 import Control.Monad (join, foldM)
 import Control.Monad.Writer (runWriter)
 import Prelude hiding (Rational, product)
+import Data.Either (partitionEithers)
+import Data.List (delete)
 
 import Sesyrel.Expression
 import Sesyrel.FaultTree
@@ -17,7 +19,7 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM (empty)
 
-data DistrDef = DistrLambda Rational
+data DistrDef = DistrLambda Integer
               | DistrAnd Char Char
               | DistrOr Char Char
               deriving (Show, Eq)
@@ -31,7 +33,7 @@ instance Arbitrary TreeDef where
     numBaseVars <- choose (2, 5)
     let makeBase c = do
           l <- choose (1, 10)
-          return (c, DistrLambda (fromInteger l))
+          return (c, DistrLambda l)
         makeBi' f t c = do
           let ks = M.keys t
           v1 <- elements ks
@@ -44,12 +46,34 @@ instance Arbitrary TreeDef where
     fullMap <- foldM makeBi baseMap depVars
     return $ TreeDef fullMap
 
+  shrink (TreeDef def) =
+    let labelVar (c, DistrLambda _) = Left c
+        labelVar (c, DistrAnd a b) = Right (c, [a, b])
+        labelVar (c, DistrOr a b) = Right (c, [a, b])
+        (lambdaVars, distrVars) = partitionEithers (map labelVar (M.toList def))
+        substDistr v vs (DistrAnd a1 a2) = do
+          b1 <- if a1 == v then vs else [a1]
+          b2 <- if a2 == v then vs else [a2]
+          return $ DistrAnd b1 b2
+        substDistr v vs (DistrOr a1 a2) = do
+          b1 <- if a1 == v then vs else [a1]
+          b2 <- if a2 == v then vs else [a2]
+          return $ DistrOr b1 b2
+        substDistr v vs d@(DistrLambda _) = [d]
+        substVar v vs (c, d) | c == v = []
+                             | otherwise = [(c, p) | p <- substDistr v vs d]
+        go v vs = sequence . map (substVar v vs) . filter (\(c, _) -> c /= v)
+    in do
+      (v, vs) <- [(v, delete v lambdaVars) | v <- lambdaVars] ++ distrVars
+      sh <- go v vs (M.toList def)
+      return (TreeDef . M.fromList $ sh)
+
 makeFaultTree :: TreeDef -> FaultTree
 makeFaultTree (TreeDef def) = snd . evalFaultTreeM $ treeM
   where
     treeM = foldM addToTree M.empty (M.toList def)
     addToTree :: Map Char Int -> (Char, DistrDef) -> FaultTreeM (Map Char Int)
-    addToTree assoc (c, DistrLambda l) = lambdaM l >>= \i -> return $ M.insert c i assoc
+    addToTree assoc (c, DistrLambda l) = lambdaM (fromInteger l) >>= \i -> return $ M.insert c i assoc
     addToTree assoc (c, DistrAnd v1 v2) = andM (assoc M.! v1) (assoc M.! v2) >>= \i -> return $ M.insert c i assoc
     addToTree assoc (c, DistrOr v1 v2) = orM (assoc M.! v1) (assoc M.! v2) >>= \i -> return $ M.insert c i assoc
 
