@@ -30,8 +30,8 @@ newtype TreeDef = TreeDef (Map Char DistrDef)
 
 instance Arbitrary TreeDef where
   arbitrary = do
-    numDepVars <- choose (10, 20)
-    numBaseVars <- choose (2, 5)
+    numDepVars <- choose (5, 7)
+    numBaseVars <- choose (2, 4)
     let makeBase c = do
           l <- choose (1, 10)
           return (c, DistrLambda l)
