@@ -18,46 +18,17 @@ main = do
 
 trees :: [(String, Maybe [Int], FaultTreeM [Int])]
 trees =
-  [ ("ftree1", Nothing, simpleFaultTreeM1)
-  , ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM1)
-  , ("ftree2", Nothing, simpleFaultTreeM2)
-  , ("ftree3", Nothing, simpleFaultTreeM3)
-  , ("failed fault tree", Nothing, failedFaultTree)
+  [ ("ftree1", Nothing, simpleFaultTreeM)
+  , ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM)
   ]
 
-simpleFaultTreeM1 :: FaultTreeM [Int]
-simpleFaultTreeM1 = do
+simpleFaultTreeM :: FaultTreeM [Int]
+simpleFaultTreeM = do
   a <- lambdaM 15.0
   b <- lambdaM 35.0
   andM a b
   c <- lambdaM 3.0
   t <- andM a c
-  return [t]
-
-simpleFaultTreeM2 :: FaultTreeM [Int]
-simpleFaultTreeM2 = do
-  a <- lambdaM 10.0
-  b <- lambdaM 3.0
-  t <- priorityAndOrM a b b
-  return [t]
-
-simpleFaultTreeM3 :: FaultTreeM [Int]
-simpleFaultTreeM3 = do
-  a <- lambdaM 10.0
-  b <- andM a a
-  c <- andM a b
-  d <- orM a c
-  t <- priorityAndOrM d a c
-  return [t]
-
-failedFaultTree :: FaultTreeM [Int]
-failedFaultTree = do
-  x1 <- lambdaM 70
-  x2 <- lambdaM 70
-  v <- lambdaM 10
-  y1 <- priorityAndOrM v x1 x2
-  y2 <- priorityAndOrM v x1 x2
-  t <- orM y1 y2
   return [t]
 
 escalatorChannelM :: Int -> FaultTreeM Int
