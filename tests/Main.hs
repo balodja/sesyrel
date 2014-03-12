@@ -1,6 +1,6 @@
 module Main where
 
-import Test.QuickCheck (Arbitrary(..), choose, elements, once)
+import Test.QuickCheck (Arbitrary(..), choose, elements, once, sized)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 import Test.Framework (Test, testGroup, defaultMain)
 
@@ -29,9 +29,9 @@ newtype TreeDef = TreeDef (Map Char DistrDef)
                   deriving (Show, Eq)
 
 instance Arbitrary TreeDef where
-  arbitrary = do
-    numDepVars <- choose (5, 7)
-    numBaseVars <- choose (2, 4)
+  arbitrary = sized $ \n -> do
+    numDepVars <- choose (5, 5 + n `div` 40)
+    numBaseVars <- choose (2, 2 + n `div` 40)
     let makeBase c = do
           l <- choose (1, 10)
           return (c, DistrLambda l)
@@ -92,7 +92,7 @@ makeFaultTree (TreeDef def) = snd . evalFaultTreeM $ treeM
     addToTree assoc (c, DistrPAndOr v1 v2 v3) = priorityAndOrM (assoc M.! v1) (assoc M.! v2) (assoc M.! v3) >>= \i -> return $ M.insert c i assoc
 
 checkFactors :: [Factor] -> [Int] -> Bool -> Bool
-checkFactors factors xs opt = (== exprOne) . deepExpand . foldl1 product
+checkFactors factors xs opt = (== exprOne) . deepExpand . foldl product exprOne
                               . map fst . fst . runWriter
                               . factorsEliminate xs opt $ factors
   where
