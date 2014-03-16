@@ -1,7 +1,7 @@
 import Sesyrel.FaultTree
 import Sesyrel.Distribution
 
-import Control.Monad.Writer
+import Control.Monad.Writer.Strict
 
 import Prelude hiding (Rational)
 import System.IO (withFile, hFlush, hPutStrLn, IOMode(..))

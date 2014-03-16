@@ -30,26 +30,26 @@ import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM
   (empty, delete, insert, findWithDefault, unionWith)
 
-data Expr a = ExprC (Term a) (Expr a)
-            | ExprN (Term a)
+data Expr a = ExprC !(Term a) !(Expr a)
+            | ExprN !(Term a)
             deriving (Show, Eq)
 
 instance Substitutable Expr where
   substitute v sym = mapExpr (substitute v sym)
 
 data Term a = Term {
-    termAtom :: Atom a
-  , termExpr :: [Expr a]
+    termAtom :: !(Atom a)
+  , termExpr :: ![Expr a]
   } deriving (Show, Eq)
 
 instance Substitutable Term where
   substitute v sym (Term a es) = Term (substitute v sym a) (substitute v sym <$> es)
 
 data Atom a = Atom {
-    atomConstant :: a
-  , atomDeltas :: DeltaBundle a
-  , atomUnits :: UnitBundle a
-  , atomExponent :: IntMap a
+    atomConstant :: !a
+  , atomDeltas :: !(DeltaBundle a)
+  , atomUnits :: !(UnitBundle a)
+  , atomExponent :: !(IntMap a)
   } deriving (Show, Eq)
 
 instance Substitutable Atom where

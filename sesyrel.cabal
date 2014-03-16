@@ -14,6 +14,7 @@ Cabal-Version:		>= 1.8
 Executable sesyrel
   Main-is:		Sesyrel.hs
   Hs-Source-Dirs:	src
+  GHC-Options:		-Wall
   Build-Depends:	base >= 4, mtl >= 2, containers
 
 Test-suite sesyrel-test
