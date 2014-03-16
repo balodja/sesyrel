@@ -2,7 +2,7 @@
 
 module Sesyrel.FaultTree (
     FaultTree(..)
-  , FaultTreeM(..)
+  , FaultTreeM
   , evalFaultTreeM
   , newVariableM
   , addFactorM
@@ -17,8 +17,6 @@ import Sesyrel.Expression
 import Prelude hiding (Rational)
 
 import Control.Monad.RWS
-import Control.Monad.Writer
-import Control.Monad.Fix
 
 type FaultTreeM = RWS Int [String] FaultTree
 
@@ -50,7 +48,6 @@ addFactorM factor = modify $ \fts ->
 lambdaM :: Rational -> FaultTreeM Int
 lambdaM lambda = do
   var <- newVariableM
-  vars <- ask
   let expr = distributionLambda var lambda
   addFactorM (expr, [var])
   return var

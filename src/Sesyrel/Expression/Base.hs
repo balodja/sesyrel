@@ -25,7 +25,7 @@ import qualified Prelude as Prelude (product)
 
 import Data.Set (Set)
 import qualified Data.Set as S
-  (map, empty, null, union, singleton, delete, insert, fromList, toList)
+  (map, empty, null, union, delete, insert, fromList, toList)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM
   (empty, delete, insert, findWithDefault, unionWith)
@@ -78,7 +78,7 @@ instance Ord a => Ord (Symbol a) where
   compare (Variable i) (Variable j) = compare i j
 
 instance Substitutable Symbol where
-  substitute i s c@(Constant _) = c
+  substitute _ _ c@(Constant _) = c
   substitute i s v@(Variable j) | i == j = s
                                 | otherwise = v
 
@@ -154,24 +154,24 @@ makeSingle :: (Ord a, Bundle b) => Int -> Int -> b a
 makeSingle a b = singletonBundle (DiffSym (Variable a) (Variable b))
 
 cancelUsAtom :: (Fractional a, Ord a, RealInfinite a) => Atom a -> Atom a
-cancelUsAtom (Atom k1 ds us exp) =
-  let go k (d@(DiffSym (Variable v) s) : ds) us exp =
+cancelUsAtom (Atom k1 deltas units expnt) =
+  let go k (d@(DiffSym (Variable v) s) : ds) us e =
         let sbstn = substitute v s
-            (k', exp') = substituteExp v s exp
-            (k'', ds', us', exp'') = go k' (map sbstn ds) (map sbstn us) exp'
-        in (k'' * k, d : ds', us', exp'')
-      go k [] us exp = (k, [], us, exp)
-      go _ _ us _ = error "calcelUsAtom: something strange happened"
-      (k2, ds', us', exp') = go 1 (toListBundle ds) (toListBundle us) exp
-      (k3, us'') = cancelUnits (fromListBundle us')
-  in Atom (k1 * k2 * k3) (fromListBundle ds') us'' exp'
+            (k', e') = substituteExp v s e
+            (k'', ds', us', e'') = go k' (map sbstn ds) (map sbstn us) e'
+        in (k'' * k, d : ds', us', e'')
+      go k [] us e = (k, [], us, e)
+      go _ _ _ _ = error "calcelUsAtom: something strange happened"
+      (k2, deltas', units', expnt') = go 1 (toListBundle deltas) (toListBundle units) expnt
+      (k3, units'') = cancelUnits (fromListBundle units')
+  in Atom (k1 * k2 * k3) (fromListBundle deltas') units'' expnt'
 
 groupifyAtoms :: (Eq a, Num a) => [Atom a] -> [Atom a]
 groupifyAtoms [] = []
 groupifyAtoms (a : as) = case partition (a `similar`) as of
   ([], rest) -> a : groupifyAtoms rest
-  (found, rest) -> let Atom k0 ds us exp = a
-                       a' = Atom (k0 + sum (map atomConstant found)) ds us exp
+  (found, rest) -> let Atom k0 ds us e = a
+                       a' = Atom (k0 + sum (map atomConstant found)) ds us e
                    in a' : groupifyAtoms rest
   where
     similar (Atom _ ds1 us1 e1) (Atom _ ds2 us2 e2) =
@@ -214,7 +214,7 @@ normalizeDelta :: DiffSym a -> DiffSym a
 normalizeDelta d@(DiffSym (Variable ix) (Variable iy))
   | ix > iy = d
   | otherwise = DiffSym (Variable iy) (Variable ix)
-normalizeDelta d@(DiffSym c@(Constant _) i@(Variable _))
+normalizeDelta (DiffSym c@(Constant _) i@(Variable _))
       = DiffSym i c
 normalizeDelta d = d
 

@@ -8,9 +8,9 @@ import System.IO (withFile, hFlush, hPutStrLn, IOMode(..))
 
 main :: IO ()
 main = do
-  let doIt (name, mbOrder, ftreeM) = let (vs, FaultTree _ factors) = evalFaultTreeM ftreeM
+  let doIt (name, mbOrder, ftreeM) = let (vars, FaultTree _ factors) = evalFaultTreeM ftreeM
                                      in case mbOrder of
-                                       Nothing -> factorsSimpleProcess name (Left vs) factors
+                                       Nothing -> factorsSimpleProcess name (Left vars) factors
                                        Just vs -> factorsSimpleProcess name (Right vs) factors
   withFile "output.tex" WriteMode $ \h -> do
     let putLine l = hPutStrLn h l >> hFlush h
@@ -26,7 +26,7 @@ simpleFaultTreeM :: FaultTreeM [Int]
 simpleFaultTreeM = do
   a <- lambdaM 15.0
   b <- lambdaM 35.0
-  andM a b
+  _ <- andM a b
   c <- lambdaM 3.0
   t <- andM a c
   return [t]

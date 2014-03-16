@@ -35,7 +35,7 @@ instance Integral a => Num (Ratio a) where
   (p1 :% q1) * (p2 :% q2) = (p1 * p2) % (q1 * q2)
   negate (p :% q) = (-p) :% q
   abs (p :% q) = abs p :% q
-  signum (p :% q) = signum p :% 1
+  signum (p :% _) = signum p :% 1
   fromInteger i = fromInteger i :% 1
 
 instance Integral a => Fractional (Ratio a) where

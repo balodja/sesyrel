@@ -6,7 +6,7 @@ import Sesyrel.Expression.Base
 
 import Control.Applicative ((<$>))
 
-import Sesyrel.Expression.Ratio (Ratio, RealInfinite(..), numerator, denominator)
+import Sesyrel.Expression.Ratio (Ratio, numerator, denominator)
 
 import Data.List (intercalate)
 import Data.IntMap.Strict (IntMap)
@@ -28,12 +28,12 @@ instance Texifiable Double where
 instance (Integral a, Texifiable a) => Texifiable (Ratio a) where
   texify z = let y = denominator z
                  x = numerator z
-                 infty x | x > 0 = "+\\infty"
-                         | x < 0 = "-\\infty"
+                 infty f | f > 0 = "+\\infty"
+                         | f < 0 = "-\\infty"
                          | otherwise = "\\bot"
                  check 1 = texify x
                  check 0 = infty x
-                 check y = "\\frac{" ++ texify x ++ "}{" ++ texify y ++ "}"
+                 check yy = "\\frac{" ++ texify x ++ "}{" ++ texify yy ++ "}"
              in check y
 
 instance (Num a, Ord a, Texifiable a) => Texifiable (Expr a) where
@@ -55,28 +55,26 @@ texifyTerm (Term a es) | isOne a && not (null exprs) = (fst (texifyAtom a), expr
                        | otherwise = (sign, atom ++ delimiter ++ exprs)
     where
       (sign, atom) = texifyAtom a
-      isOne (Atom k ds us exp) = abs k == 1 && nullBundle ds && nullBundle us && F.all (== 0) exp
+      isOne (Atom k ds us e) = abs k == 1 && nullBundle ds && nullBundle us && F.all (== 0) e
       delimiter = if null atom || null exprs then "" else " \\cdot "
       exprs = intercalate " \\cdot " $ texifyAndParen <$> es
       texifyAndParen e@(ExprC _ _) = "\\big[ " ++ texify e ++ " \\big]"
       texifyAndParen e@(ExprN _) = texify e
 
 texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, String)
-texifyAtom (Atom k deltas units exponent)
+texifyAtom (Atom k deltas units expnt)
   | nullBundle deltas
     && nullBundle units
-    && F.all (== 0) exponent = (sign, texify absK)
+    && F.all (== 0) expnt = (sign, texify absK)
   | otherwise =
     (,) sign $
     (if absK == 1 then [] else texify absK)
       ++ (unwords . map texifyDelta . toListBundle $ deltas)
       ++ (unwords . map texifyUnit . toListBundle $ units)
-      ++ texifyExponent (IM.map negate exponent)
+      ++ texifyExponent (IM.map negate expnt)
         where
           absK = abs k
           sign = if signum k == 1 then '+' else '-'
-          nullCheck [] = "0"
-          nullCheck s = s
           texifyDelta d = "\\delta(" ++ texify d ++ ")"
           texifyUnit u = "\\theta(" ++ texify u ++ ")"
           texifyExponent e = let vf = texifyVarForm e

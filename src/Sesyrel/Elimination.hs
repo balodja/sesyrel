@@ -6,14 +6,12 @@ import Data.Maybe (fromJust, fromMaybe)
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IM
 
-import Debug.Trace (trace)
-
 type Graph = IntMap [Int]
 
 findOrdering :: [Int] -> [[Int]] -> [Int]
-findOrdering vs cliques = go vs (makeGraph cliques)
+findOrdering vars cliques = go vars (makeGraph cliques)
   where
-    go [] g = []
+    go [] _ = []
     go vs g = let v = getNextVertex vs g
               in v : go (delete v vs) (removeVertex v g)
 
@@ -45,8 +43,7 @@ costFunctionMinFill :: Graph -> Int -> Int
 costFunctionMinFill g v =
   let neighs = fromMaybe [] (IM.lookup v g)
       n = length neighs
-      edge n = map ((,) n) $ g IM.! n
-      inClique ns (a, b) = elem a neighs && elem b neighs
-      neighEdges2 = length . filter (inClique neighs)
-                   . concatMap edge $ neighs
+      edge k = map ((,) k) $ g IM.! k
+      inClique (a, b) = elem a neighs && elem b neighs
+      neighEdges2 = length . filter inClique . concatMap edge $ neighs
   in n * (n - 1) - neighEdges2

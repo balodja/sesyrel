@@ -44,18 +44,18 @@ integrateM expr var lo hi = do
   return $ fromList [Term a [] | a <- atoms]
 
 integrateAtom :: (RealInfinite a, Fractional a, Ord a) => Atom a -> Int -> Limit a -> Limit a -> [Atom a]
-integrateAtom (Atom k ds us exp) var lo hi =
+integrateAtom (Atom k deltas units expnt) var lo hi =
   fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> Just intExp
     where
       intEqualLimits | lo == hi = Just [Atom 0 emptyBundle emptyBundle IM.empty]
                      | otherwise = Nothing
       
-      intDelta = case findDiff var ds of
+      intDelta = case findDiff var deltas of
         Nothing -> Nothing
         Just d ->
           let sym = calcSubstitution d
               us1 = calcDeltaUnits sym
-              a = Atom k (deleteDiff d ds) (unionBundle us1 us) exp
+              a = Atom k (deleteDiff d deltas) (unionBundle us1 units) expnt
           in Just [substitute var sym a]
       
       calcSubstitution (DiffSym (Variable x) (Variable y))
@@ -76,44 +76,44 @@ integrateAtom (Atom k ds us exp) var lo hi =
           higher y@(Constant c) | c == plusInfinity = emptyBundle
                                 | otherwise = singletonBundle (DiffSym y vec)
 
-      intExp = let lambda = fromMaybe (error "integrateAtom: intExp failed") (IM.lookup var exp)
+      intExp = let lambda = fromMaybe (error "integrateAtom: intExp failed") (IM.lookup var expnt)
                    subLimit a (Constant c)
                      | c == plusInfinity = Atom 0 emptyBundle emptyBundle IM.empty
                      | c == 0 = substitute var (Constant 0) a
                      | otherwise = error "intExp: strange constant in limits"
                    subLimit a sym = substitute var sym a
-               in [ subLimit (Atom (-k / lambda) ds us exp) hi
-                  , subLimit (Atom (k / lambda) ds us exp) lo
+               in [ subLimit (Atom (-k / lambda) deltas units expnt) hi
+                  , subLimit (Atom (k / lambda) deltas units expnt) lo
                   ]
       
-      intUnit = case findDiff var us of
+      intUnit = case findDiff var units of
         Nothing -> Nothing
-        Just u -> Just $ intUnit' u (deleteDiff u us)
+        Just u -> Just $ intUnit' u (deleteDiff u units)
       intUnit' (DiffSym x y) us | x == Variable var =
         case hi of
           Constant c | c == plusInfinity ->
             let us1 = DiffSym y lo `insertDiff` us
                 us2 = DiffSym lo y `insertDiff` us
-            in integrateAtom (Atom k ds us1 exp) var y (Constant c)
-               ++ integrateAtom (Atom k ds us2 exp) var lo (Constant c)
+            in integrateAtom (Atom k deltas us1 expnt) var y (Constant c)
+               ++ integrateAtom (Atom k deltas us2 expnt) var lo (Constant c)
                      | otherwise -> error "integrateAtom: const at higher limit? no wai"
           higherLimit ->
             let u1 = DiffSym higherLimit y
                 u2 = DiffSym y lo
                 us1 = u1 `insertDiff` (u2 `insertDiff` us)
                 us2 = DiffSym lo y `insertDiff` us
-            in integrateAtom (Atom k ds us1 exp) var y hi
-               ++ integrateAtom (Atom k ds us2 exp) var lo hi
+            in integrateAtom (Atom k deltas us1 expnt) var y hi
+               ++ integrateAtom (Atom k deltas us2 expnt) var lo hi
                        | otherwise =
         case hi of
           Constant c | c == plusInfinity ->
             let us1 = DiffSym x lo `insertDiff` us
-            in integrateAtom (Atom k ds us1 exp) var lo x
+            in integrateAtom (Atom k deltas us1 expnt) var lo x
                      | otherwise -> error "integrateAtom: const at higher limit? no wai"
           higherLimit ->
             let u1 = DiffSym x lo
                 u2 = DiffSym higherLimit x
                 us1 = u1 `insertDiff` (u2 `insertDiff` us)
                 us2 = DiffSym x higherLimit `insertDiff` us
-            in integrateAtom (Atom k ds us1 exp) var lo x
-               ++ integrateAtom (Atom k ds us2 exp) var lo hi
+            in integrateAtom (Atom k deltas us1 expnt) var lo x
+               ++ integrateAtom (Atom k deltas us2 expnt) var lo hi

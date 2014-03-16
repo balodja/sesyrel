@@ -6,7 +6,7 @@ module Sesyrel.Distribution (
   , distributionAnd
   , distributionOr
   , distributionPriorityAndOr
-  , Factor(..)
+  , Factor
   , factorsTell
   , factorsSimpleProcess
   , factorsEliminate
@@ -22,7 +22,7 @@ import Control.Monad.Writer
 import Prelude hiding (product, Rational)
 import Data.List (intercalate, intersperse, nub, sort, union, partition, delete, (\\))
 
-import qualified Data.IntMap.Strict as IM (delete, lookup, singleton, fromList, empty)
+import qualified Data.IntMap.Strict as IM (delete, lookup, singleton, empty)
 import Data.Maybe (fromMaybe)
 import qualified Data.Foldable as F (all)
 
@@ -31,22 +31,26 @@ type Factor = (Expr Rational, [Int])
 calcMttf :: (Eq a, Fractional a) => Int -> Expr a -> a
 calcMttf var = sum . map mapTerm . toList
   where
-    checkAtom (Atom _ ds us exp) =
-      nullBundle ds && nullBundle us && F.all (== 0) (IM.delete var exp)
-    mapTerm (Term a@(Atom k _ _ exp) []) | checkAtom a = k / (fromMaybe (error "calcMttf: lookup fail") (IM.lookup var exp)) ^ 2
-                                         | otherwise =
-                                           error "calcMttf: too complex expr"
+    checkAtom (Atom _ ds us expnt) =
+      nullBundle ds && nullBundle us && F.all (== 0) (IM.delete var expnt)
+    mapTerm (Term a@(Atom k _ _ expnt) []) | checkAtom a =
+      k / (fromMaybe (error "calcMttf: lookup fail") (IM.lookup var expnt)) ^ (2 :: Integer)
+                                           | otherwise =
+                                             error "calcMttf: too complex expr"
+    mapTerm (Term _ _) = error "calcMttf: expr is not atomized"
 
 distributionLambda :: Num a => Int -> a -> Expr a
 distributionLambda variable lambda =
-  let exp = IM.singleton variable lambda
-  in ExprN $ Term (Atom lambda emptyBundle emptyBundle exp) []
+  let expnt = IM.singleton variable lambda
+  in ExprN $ Term (Atom lambda emptyBundle emptyBundle expnt) []
 
+{-
 -- should not be used
 distributionCspLambda :: (Num a, Ord a) => Int -> a -> Int -> Expr a
 distributionCspLambda varB lambda varA =
-  let exp = IM.fromList [(varA, lambda), (varB, -lambda)]
-  in ExprN $ Term (Atom lambda emptyBundle (makeSingle varB varA) exp) []
+  let expnt = IM.fromList [(varA, lambda), (varB, -lambda)]
+  in ExprN $ Term (Atom lambda emptyBundle (makeSingle varB varA) expnt) []
+-}
 
 distributionAnd :: (Num a, Ord a) => Int -> Int -> Int -> Expr a
 distributionAnd x a b =
@@ -60,11 +64,13 @@ distributionOr x a b =
       a2 = Atom 1 (makeSingle x b) (makeSingle a b) IM.empty
   in normalizeDs $ ExprC (Term a1 []) (ExprN (Term a2 []))
 
+{-
 -- should not be used
 distributionPriorityAnd :: (Num a, Ord a) => Int -> Int -> Int -> Expr a
 distributionPriorityAnd x a b =
   let atom = Atom 1 (makeSingle x b) (makeSingle b a) IM.empty
   in normalizeDs $ ExprN (Term atom [])
+-}
 
 distributionPriorityAndOr :: (Num a, Ord a) => Int -> Int -> Int -> Int -> Expr a
 distributionPriorityAndOr x a b c =
