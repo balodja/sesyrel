@@ -15,8 +15,10 @@ module Sesyrel.Expression.Base (
 
 import Control.Applicative ((<$>))
 import qualified Data.Foldable as F (find)
+import Data.Monoid ((<>))
 
-import Data.List (partition, delete)
+import Data.List (delete, sort, sortBy)
+import GHC.Exts (build)
 import Data.Either (partitionEithers)
 import Sesyrel.Expression.Ratio (RealInfinite(..))
 
@@ -166,16 +168,24 @@ cancelUsAtom (Atom k1 deltas units expnt) =
       (k3, units'') = cancelUnits (fromListBundle units')
   in Atom (k1 * k2 * k3) (fromListBundle deltas') units'' expnt'
 
-groupifyAtoms :: (Eq a, Num a) => [Atom a] -> [Atom a]
-groupifyAtoms [] = []
-groupifyAtoms (a : as) = case partition (a `similar`) as of
-  ([], rest) -> a : groupifyAtoms rest
-  (found, rest) -> let Atom k0 ds us e = a
-                       a' = Atom (k0 + sum (map atomConstant found)) ds us e
-                   in a' : groupifyAtoms rest
+groupifyAtoms :: (Ord a, Num a) => [Atom a] -> [Atom a]
+groupifyAtoms = map compact . groupBy similar
   where
+    compact as = let (Atom _ ds us e) = head as
+                     k = foldl (\s a -> s + atomConstant a) 0 as
+                 in Atom k ds us e
     similar (Atom _ ds1 us1 e1) (Atom _ ds2 us2 e2) =
-      (e1 == e2) && (ds1 == ds2) && (us1 == us2)
+      compare e1 e2 <> compare ds1 ds2 <> compare us1 us2
+
+{-# INLINE groupBy #-}
+groupBy :: (a -> a -> Ordering) -> [a] -> [[a]]
+groupBy f xs = build (\c n -> groupByFB c n (\x y -> f x y == EQ) (sortBy f xs))
+
+groupByFB :: ([a] -> lst -> lst) -> lst -> (a -> a -> Bool) -> [a] -> lst
+groupByFB c n eq xs0 = groupByFBCore xs0
+  where groupByFBCore [] = n
+        groupByFBCore (x:xs) = c (x:ys) (groupByFBCore zs)
+            where (ys, zs) = span (eq x) xs
 
 class Substitutable e where
   substitute :: (RealInfinite a, Ord a) => Int -> Symbol a -> e a -> e a
@@ -194,7 +204,7 @@ singletonBundle :: (Ord a, Bundle b) => DiffSym a -> b a
 singletonBundle d = insertDiff d emptyBundle
 
 newtype DeltaBundle a = DeltaBundle {getDeltaBundle :: Set (DiffSym a)}
-                      deriving (Show, Read, Eq)
+                      deriving (Show, Read, Eq, Ord)
 
 instance Substitutable DeltaBundle where
   substitute v sym (DeltaBundle ds) = DeltaBundle $ S.map (substitute v sym) ds
@@ -219,7 +229,7 @@ normalizeDelta (DiffSym c@(Constant _) i@(Variable _))
 normalizeDelta d = d
 
 newtype UnitBundle a = UnitBundle {getUnitBundle :: [DiffSym a]}
-                     deriving (Show, Read, Eq)
+                     deriving (Show, Read, Eq, Ord)
 
 instance Substitutable UnitBundle where
   substitute v sym (UnitBundle us) = UnitBundle $ substitute v sym <$> us
@@ -227,10 +237,10 @@ instance Substitutable UnitBundle where
 instance Bundle UnitBundle where
   emptyBundle = UnitBundle []
   nullBundle (UnitBundle us) = null us
-  unionBundle (UnitBundle a) (UnitBundle b) = UnitBundle (a ++ b)
+  unionBundle (UnitBundle a) (UnitBundle b) = UnitBundle (sort $ a ++ b)
   toListBundle (UnitBundle us) = us
-  fromListBundle us = UnitBundle us
-  insertDiff u (UnitBundle us) = UnitBundle $ u : us
+  fromListBundle us = UnitBundle . sort $ us
+  insertDiff u (UnitBundle us) = UnitBundle . sort $ u : us
   deleteDiff u (UnitBundle us) = UnitBundle $ delete u us
   findDiff var =
     F.find (\(DiffSym a b) -> a == Variable var || b == Variable var) . getUnitBundle
