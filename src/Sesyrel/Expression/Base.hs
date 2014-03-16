@@ -4,7 +4,7 @@ module Sesyrel.Expression.Base (
     Expr(..), Term(..) , Atom(..)
   , Symbol(..), DiffSym(..)
   , toList, fromList
-  , normalizeDs
+  , normalizeDs, normalizeUs
   , Substitutable(..)
   , Bundle(..), singletonBundle
   , DeltaBundle(..), UnitBundle(..)
@@ -17,7 +17,7 @@ import Control.Applicative ((<$>))
 import qualified Data.Foldable as F (find)
 import Data.Monoid ((<>))
 
-import Data.List (delete, sort, sortBy)
+import Data.List (delete, sort, sortBy, foldl')
 import GHC.Exts (build)
 import Data.Either (partitionEithers)
 import Sesyrel.Expression.Ratio (RealInfinite(..))
@@ -125,6 +125,18 @@ normalizeDsTerm (Term a es) = Term (normalizeDsAtom a) (normalizeDs <$> es)
 
 normalizeDsAtom :: (Num a, Ord a) => Atom a -> Atom a
 normalizeDsAtom (Atom k ds us e) = Atom k (DeltaBundle (S.map normalizeDelta (getDeltaBundle ds))) us e
+
+normalizeUs :: (Num a, Ord a) => Expr a -> Expr a
+normalizeUs = mapExpr normalizeUsTerm
+
+normalizeUsTerm :: (Num a, Ord a) => Term a -> Term a
+normalizeUsTerm (Term a es) = let (a', es') = normalizeUsAtom a
+                              in Term a' (es' ++ (normalizeUs <$> es))
+
+normalizeUsAtom :: (Num a, Ord a) => Atom a -> (Atom a, [Expr a])
+normalizeUsAtom (Atom k ds us e) =
+  let (es', us') = partitionEithers . map normalizeUnit . toListBundle $ us
+  in (Atom k ds (fromListBundle us') e, es')
 
 deepExpand :: (Num a, Ord a) => Expr a -> Expr a
 deepExpand e | isExpandable e = deepExpand (expand e)
@@ -254,3 +266,18 @@ cancelUnits us =
       separate (DiffSym (Constant 0) (Variable _)) = Left 0
       separate u@(DiffSym x y) | x == y = Left (1 / 2)
                                | otherwise = Right u
+
+normalizeUnit :: (Num a, Ord a) => DiffSym a -> Either (Expr a) (DiffSym a)
+normalizeUnit d@(DiffSym (Variable ix) (Variable iy))
+  | ix < iy = Right d
+  | otherwise = Left (swapUnit d)
+normalizeUnit d@(DiffSym (Constant _) (Variable _))
+      = Left (swapUnit d)
+normalizeUnit d = Right d
+
+
+{-# INLINE swapUnit #-}
+swapUnit :: (Num a, Ord a) => DiffSym a -> Expr a
+swapUnit (DiffSym x y) =
+  ExprC (Term (Atom 1 emptyBundle emptyBundle IM.empty) []) $
+  ExprN (Term (Atom 1 emptyBundle (singletonBundle $ DiffSym y x) IM.empty) [])
