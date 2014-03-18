@@ -22,6 +22,16 @@ trees =
   , ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM)
   ]
 
+testTreeM :: FaultTreeM [Int]
+testTreeM = do
+  a <- lambdaM 3.0
+  b <- lambdaM 5.0
+  c <- orM b b
+  d <- orM b c
+  e <- andM a c
+  f <- andM c d
+  return []
+
 simpleFaultTreeM :: FaultTreeM [Int]
 simpleFaultTreeM = do
   a <- lambdaM 15.0
