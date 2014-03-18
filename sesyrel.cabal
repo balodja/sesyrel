@@ -14,14 +14,14 @@ Cabal-Version:		>= 1.8
 Executable sesyrel
   Main-is:		Sesyrel.hs
   Hs-Source-Dirs:	src
-  GHC-Options:		-Wall
-  Build-Depends:	base >= 4, mtl >= 2, containers
+  GHC-Options:		-Wall -O2
+  Build-Depends:	base >= 4, mtl >= 2, containers, signed-multiset
 
 Test-suite sesyrel-test
   Type:			exitcode-stdio-1.0
   Main-is:		Main.hs
   Hs-Source-Dirs:	tests, src
   Build-Depends:
-    base >= 4, mtl >= 2, containers,
+    base >= 4, mtl >= 2, containers, signed-multiset,
     QuickCheck >= 2, test-framework >= 0.8,
     test-framework-quickcheck2 >= 0.3

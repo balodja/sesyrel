@@ -9,6 +9,7 @@ import Control.Applicative ((<$>))
 import Sesyrel.Expression.Ratio (Ratio, numerator, denominator)
 
 import Data.List (intercalate)
+import qualified Data.SignedMultiset as SM (toList)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM (map, toList)
 import qualified Data.Foldable as F (all)
@@ -70,14 +71,15 @@ texifyAtom (Atom k deltas units inds expnt)
     (,) sign $
     (if absK == 1 then [] else texify absK)
       ++ (unwords . map texifyDelta . toListBundle $ deltas)
-      ++ (unwords . map texifyUnit . toListBundle $ units)
+      ++ (unwords . map texifyUnit . SM.toList . getUnitBundle $ units)
       ++ (unwords . map texifyIndicator . toListBundle $ inds)
       ++ texifyExponent (IM.map negate expnt)
         where
           absK = abs k
           sign = if signum k == 1 then '+' else '-'
           texifyDelta d = "\\delta(" ++ texify d ++ ")"
-          texifyUnit u = "\\theta(" ++ texify u ++ ")"
+          texifyUnit (u, n) | n == 1 = "\\theta(" ++ texify u ++ ")"
+                            | otherwise = "\\theta(" ++ texify u ++ ")^{" ++ show n ++ "}"
           texifyIndicator i = "\\epsilon(" ++ texify i ++ ")"
           texifyExponent e = let vf = texifyVarForm e
                              in if null vf then [] else "e^{" ++ vf ++ "}"

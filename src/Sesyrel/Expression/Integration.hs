@@ -27,7 +27,7 @@ integrateM expr var lo hi = do
       integrateTermM (Term atom _) = do
         tell ["\\paragraph{Atom}"]
         let integrated = integrateAtom atom var lo hi
-            simplified = filterAtoms . map cancelUsAtom $ integrated
+            simplified = filterAtoms . concatMap (cancelUsAtom . unifyAtom) $ integrated
             exprBefore = ExprN (Term atom [])
             exprDuring = fromList [Term a [] | a <- integrated]
             exprAfter = fromList [Term a [] | a <- simplified]
