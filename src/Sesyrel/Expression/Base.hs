@@ -27,7 +27,7 @@ import qualified Prelude as Prelude (product)
 
 import Data.Set (Set)
 import qualified Data.Set as S
-  (map, empty, null, union, delete, insert, fromList, toList)
+  (map, empty, null, union, delete, insert, fromList, toList, difference, intersection)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM
   (empty, delete, insert, findWithDefault, unionWith)
@@ -51,12 +51,13 @@ data Atom a = Atom {
     atomConstant :: !a
   , atomDeltas :: !(DeltaBundle a)
   , atomUnits :: !(UnitBundle a)
+  , atomIndicators :: !(IndicatorBundle a)
   , atomExponent :: !(IntMap a)
   } deriving (Show, Eq)
 
 instance Substitutable Atom where
-  substitute v sym (Atom k1 ds us e1) = normalizeDsAtom $
-    Atom (k1 * k2) (substitute v sym ds) (substitute v sym us) e2
+  substitute v sym (Atom k1 ds us is e1) = normalizeDsAtom $
+    Atom (k1 * k2) (substitute v sym ds) (substitute v sym us) (substitute v sym is) e2
     where
       (k2, e2) = substituteExp v sym e1
 
@@ -112,7 +113,7 @@ toList (ExprN t) = [t]
 fromList :: Num a => [Term a] -> Expr a
 fromList (t : []) = ExprN t
 fromList (t : ts) = ExprC t (fromList ts)
-fromList [] = ExprN (Term (Atom 0 emptyBundle emptyBundle IM.empty) [])
+fromList [] = ExprN (Term (Atom 0 emptyBundle emptyBundle emptyBundle IM.empty) [])
 
 mapExpr :: Num a => (Term a -> Term a) -> Expr a -> Expr a
 mapExpr f = fromList . map f . toList
@@ -124,7 +125,7 @@ normalizeDsTerm :: (Num a, Ord a) => Term a -> Term a
 normalizeDsTerm (Term a es) = Term (normalizeDsAtom a) (normalizeDs <$> es)
 
 normalizeDsAtom :: (Num a, Ord a) => Atom a -> Atom a
-normalizeDsAtom (Atom k ds us e) = Atom k (DeltaBundle (S.map normalizeDelta (getDeltaBundle ds))) us e
+normalizeDsAtom (Atom k ds us is e) = Atom k (DeltaBundle (S.map normalizeSymmetric (getDeltaBundle ds))) us is e
 
 normalizeUs :: (Num a, Ord a) => Expr a -> Expr a
 normalizeUs = mapExpr normalizeUsTerm
@@ -134,11 +135,11 @@ normalizeUsTerm (Term a es) = let (a', es') = normalizeUsAtom a
                               in Term a' (es' ++ (normalizeUs <$> es))
 
 normalizeUsAtom :: (Num a, Ord a) => Atom a -> (Atom a, [Expr a])
-normalizeUsAtom (Atom k ds us e) =
+normalizeUsAtom (Atom k ds us is e) =
   let (es', us') = partitionEithers . map normalizeUnit . toListBundle $ us
-  in (Atom k ds (fromListBundle us') e, es')
+  in (Atom k ds (fromListBundle us') is e, es')
 
-deepExpand :: (Num a, Ord a) => Expr a -> Expr a
+deepExpand :: (Fractional a, Ord a) => Expr a -> Expr a
 deepExpand e | isExpandable e = deepExpand (expand e)
              | otherwise = e
   where
@@ -146,48 +147,66 @@ deepExpand e | isExpandable e = deepExpand (expand e)
     isExpandableTerm (Term _ []) = False
     isExpandableTerm _ = True
 
-expand :: (Num a, Ord a) => Expr a -> Expr a
+expand :: (Fractional a, Ord a) => Expr a -> Expr a
 expand = fromList . concatMap (toList . expandTerm) . toList
 
-expandTerm :: (Num a, Ord a) => Term a -> Expr a
+expandTerm :: (Fractional a, Ord a) => Term a -> Expr a
 expandTerm (Term a []) = ExprN $ Term a []
 expandTerm (Term a es) =
   fromList . map (foldl productTerm (Term a [])) . sequence $ toList <$> es
 
-product :: (Num a, Ord a) => Expr a -> Expr a -> Expr a
-product e1 e2 = ExprN (Term (Atom 1 emptyBundle emptyBundle IM.empty) [e1, e2])
+product :: (Fractional a, Ord a) => Expr a -> Expr a -> Expr a
+product e1 e2 = ExprN (Term (Atom 1 emptyBundle emptyBundle emptyBundle IM.empty) [e1, e2])
 
-productTerm :: (Num a, Ord a) => Term a -> Term a -> Term a
-productTerm (Term a1 e1) (Term a2 e2) = Term (productAtom a1 a2) (e1 ++ e2)
+productTerm :: (Fractional a, Ord a) => Term a -> Term a -> Term a
+productTerm (Term a1 e1) (Term a2 e2) =
+  let Term a e3 = productAtom a1 a2
+  in Term a (e3 ++ e1 ++ e2)
 
-productAtom :: (Num a, Ord a) => Atom a -> Atom a -> Atom a
-productAtom (Atom k1 d1 u1 e1) (Atom k2 d2 u2 e2) =
-  Atom (k1 * k2) (d1 `unionBundle` d2) (u1 `unionBundle` u2) (IM.unionWith (+) e1 e2)
+productAtom :: (Fractional a, Ord a) => Atom a -> Atom a -> Term a
+productAtom (Atom k1 d1 u1 i1 e1) (Atom k2 d2 u2 i2 e2) =
+  let (noIs, is) = interDiffBundle i1 i2
+      es = map makeSquare . toListBundle $ noIs
+      makeSquare d =
+        ExprC (Term
+               (Atom 1 emptyBundle (singletonBundle d) emptyBundle IM.empty) []) $
+        ExprN (Term
+               (Atom (-1/4) emptyBundle emptyBundle (singletonBundle (normalizeSymmetric d)) IM.empty) [])
+  in Term (Atom (k1 * k2) (d1 `unionBundle` d2) (u1 `unionBundle` u2) is (IM.unionWith (+) e1 e2)) es
 
 makeSingle :: (Ord a, Bundle b) => Int -> Int -> b a
 makeSingle a b = singletonBundle (DiffSym (Variable a) (Variable b))
 
 cancelUsAtom :: (Fractional a, Ord a, RealInfinite a) => Atom a -> Atom a
-cancelUsAtom (Atom k1 deltas units expnt) =
-  let go k (d@(DiffSym (Variable v) s) : ds) us e =
+cancelUsAtom (Atom k1 deltas units inds expnt) =
+  let goD k (d@(DiffSym (Variable v) s) : ds) us is e =
         let sbstn = substitute v s
             (k', e') = substituteExp v s e
-            (k'', ds', us', e'') = go k' (map sbstn ds) (map sbstn us) e'
-        in (k'' * k, d : ds', us', e'')
-      go k [] us e = (k, [], us, e)
-      go _ _ _ _ = error "calcelUsAtom: something strange happened"
-      (k2, deltas', units', expnt') = go 1 (toListBundle deltas) (toListBundle units) expnt
+            (k'', ds', us', is', e'') = goD k' (map (normalizeSymmetric . sbstn) ds) (map sbstn us) (map (normalizeSymmetric . sbstn) is) e'
+        in (k'' * k, d : ds', us', is', e'')
+      goD k [] us is e = (k, [], us, is, e)
+      goD _ _ _ _ _ = error "cancelUsAtom: something strange happened"
+      goI k us (i@(DiffSym (Variable v) s) : is) e =
+        let sbstn = substitute v s
+            (k', e') = substituteExp v s e
+            (k'', us', is', e'') = goI k' (map sbstn us) (map (normalizeSymmetric . sbstn) is) e'
+        in (k'' * k, us', i : is', e'')
+      goI k us [] e = (k, us, [], e)
+      goI _ _ _ _ = error "cancelUsAtom: something strange happened"
+      (k2, deltas', units', inds', expnt') = goD 1 (toListBundle deltas) (toListBundle units) (toListBundle inds) expnt
       (k3, units'') = cancelUnits (fromListBundle units')
-  in Atom (k1 * k2 * k3) (fromListBundle deltas') units'' expnt'
+      (k4, inds'') = cancelIndicators (fromListBundle inds')
+      (k5, units''', inds''', expnt'') = goI 1 (toListBundle units'') (toListBundle inds'') expnt'
+  in Atom (k1 * k2 * k3 * k4 * k5) (fromListBundle deltas') (fromListBundle units''') (fromListBundle inds''') expnt''
 
 groupifyAtoms :: (Ord a, Num a) => [Atom a] -> [Atom a]
 groupifyAtoms = map compact . groupBy similar
   where
-    compact as = let (Atom _ ds us e) = head as
+    compact as = let (Atom _ ds us is e) = head as
                      k = foldl (\s a -> s + atomConstant a) 0 as
-                 in Atom k ds us e
-    similar (Atom _ ds1 us1 e1) (Atom _ ds2 us2 e2) =
-      compare e1 e2 <> compare ds1 ds2 <> compare us1 us2
+                 in Atom k ds us is e
+    similar (Atom _ ds1 us1 is1 e1) (Atom _ ds2 us2 is2 e2) =
+      compare e1 e2 <> compare ds1 ds2 <> compare us1 us2 <> compare is1 is2
 
 {-# INLINE groupBy #-}
 groupBy :: (a -> a -> Ordering) -> [a] -> [[a]]
@@ -206,6 +225,7 @@ class Bundle e where
   emptyBundle :: e a
   nullBundle :: e a -> Bool
   unionBundle :: Ord a => e a -> e a -> e a
+  interDiffBundle :: Ord a => e a -> e a -> (e a, e a)
   toListBundle :: e a -> [DiffSym a]
   fromListBundle :: Ord a => [DiffSym a] -> e a
   insertDiff :: Ord a => DiffSym a -> e a -> e a
@@ -219,41 +239,47 @@ newtype DeltaBundle a = DeltaBundle {getDeltaBundle :: Set (DiffSym a)}
                       deriving (Show, Read, Eq, Ord)
 
 instance Substitutable DeltaBundle where
-  substitute v sym (DeltaBundle ds) = DeltaBundle $ S.map (substitute v sym) ds
+  substitute v sym (DeltaBundle ds) = DeltaBundle $ S.map (normalizeSymmetric . substitute v sym) ds
 
 instance Bundle DeltaBundle where
   emptyBundle = DeltaBundle S.empty
   nullBundle (DeltaBundle ds) = S.null ds
   unionBundle (DeltaBundle a) (DeltaBundle b) = DeltaBundle $ S.union a b
+  interDiffBundle (DeltaBundle a) (DeltaBundle b) =
+    let i = S.intersection a b
+    in (DeltaBundle i, DeltaBundle $ S.difference (S.union a b) i)
   toListBundle (DeltaBundle ds) = S.toList ds
-  fromListBundle ds = DeltaBundle $ S.fromList ds
-  insertDiff d (DeltaBundle ds) = DeltaBundle $ S.insert d ds
+  fromListBundle ds = DeltaBundle . S.fromList . map normalizeSymmetric $ds
+  insertDiff d (DeltaBundle ds) = DeltaBundle $ S.insert (normalizeSymmetric d) ds
   deleteDiff d (DeltaBundle ds) = DeltaBundle $ S.delete d ds
   findDiff var =
     F.find (\(DiffSym a b) -> a == Variable var || b == Variable var) . getDeltaBundle
 
-normalizeDelta :: DiffSym a -> DiffSym a
-normalizeDelta d@(DiffSym (Variable ix) (Variable iy))
+normalizeSymmetric :: DiffSym a -> DiffSym a
+normalizeSymmetric d@(DiffSym (Variable ix) (Variable iy))
   | ix > iy = d
   | otherwise = DiffSym (Variable iy) (Variable ix)
-normalizeDelta (DiffSym c@(Constant _) i@(Variable _))
+normalizeSymmetric (DiffSym c@(Constant _) i@(Variable _))
       = DiffSym i c
-normalizeDelta d = d
+normalizeSymmetric d = d
 
-newtype UnitBundle a = UnitBundle {getUnitBundle :: [DiffSym a]}
+newtype UnitBundle a = UnitBundle {getUnitBundle :: Set (DiffSym a)}
                      deriving (Show, Read, Eq, Ord)
 
 instance Substitutable UnitBundle where
-  substitute v sym (UnitBundle us) = UnitBundle $ substitute v sym <$> us
+  substitute v sym (UnitBundle us) = UnitBundle $ S.map (substitute v sym) us
 
 instance Bundle UnitBundle where
-  emptyBundle = UnitBundle []
-  nullBundle (UnitBundle us) = null us
-  unionBundle (UnitBundle a) (UnitBundle b) = UnitBundle (sort $ a ++ b)
-  toListBundle (UnitBundle us) = us
-  fromListBundle us = UnitBundle . sort $ us
-  insertDiff u (UnitBundle us) = UnitBundle . sort $ u : us
-  deleteDiff u (UnitBundle us) = UnitBundle $ delete u us
+  emptyBundle = UnitBundle S.empty
+  nullBundle (UnitBundle us) = S.null us
+  unionBundle (UnitBundle a) (UnitBundle b) = UnitBundle $ S.union a b
+  interDiffBundle (UnitBundle a) (UnitBundle b) =
+    let i = S.intersection a b
+    in (UnitBundle i, UnitBundle $ S.difference (S.union a b) i)
+  toListBundle (UnitBundle us) = S.toList us
+  fromListBundle us = UnitBundle . S.fromList $ us
+  insertDiff u (UnitBundle us) = UnitBundle $ S.insert u us
+  deleteDiff u (UnitBundle us) = UnitBundle $ S.delete u us
   findDiff var =
     F.find (\(DiffSym a b) -> a == Variable var || b == Variable var) . getUnitBundle
 
@@ -279,5 +305,33 @@ normalizeUnit d = Right d
 {-# INLINE swapUnit #-}
 swapUnit :: (Num a, Ord a) => DiffSym a -> Expr a
 swapUnit (DiffSym x y) =
-  ExprC (Term (Atom 1 emptyBundle emptyBundle IM.empty) []) $
-  ExprN (Term (Atom 1 emptyBundle (singletonBundle $ DiffSym y x) IM.empty) [])
+  ExprC (Term (Atom 1 emptyBundle emptyBundle emptyBundle IM.empty) []) $
+  ExprN (Term (Atom 1 emptyBundle (singletonBundle $ DiffSym y x) emptyBundle IM.empty) [])
+
+newtype IndicatorBundle a = IndicatorBundle {getIndicatorBundle :: Set (DiffSym a)}
+                          deriving (Show, Read, Eq, Ord)
+
+instance Substitutable IndicatorBundle where
+  substitute v sym (IndicatorBundle is) = IndicatorBundle $ S.map (normalizeSymmetric . substitute v sym) is
+
+instance Bundle IndicatorBundle where
+  emptyBundle = IndicatorBundle S.empty
+  nullBundle (IndicatorBundle is) = S.null is
+  unionBundle (IndicatorBundle a) (IndicatorBundle b) = IndicatorBundle $ S.union a b
+  interDiffBundle (IndicatorBundle a) (IndicatorBundle b) =
+    let i = S.intersection a b
+    in (IndicatorBundle i, IndicatorBundle $ S.difference (S.union a b) i)
+  toListBundle (IndicatorBundle is) = S.toList is
+  fromListBundle is = IndicatorBundle . S.fromList . map normalizeSymmetric $ is
+  insertDiff d (IndicatorBundle is) = IndicatorBundle $ S.insert (normalizeSymmetric d) is
+  deleteDiff d (IndicatorBundle is) = IndicatorBundle $ S.delete d is
+  findDiff var =
+    F.find (\(DiffSym a b) -> a == Variable var || b == Variable var) . getIndicatorBundle
+
+cancelIndicators :: (Ord a, Fractional a) => IndicatorBundle a -> (a, IndicatorBundle a)
+cancelIndicators us =
+  case partitionEithers . map separate . toListBundle $ us of
+    (ks, us') -> (Prelude.product ks, fromListBundle us')
+    where
+      separate u@(DiffSym x y) | x == y = Left 1
+                               | otherwise = Right u

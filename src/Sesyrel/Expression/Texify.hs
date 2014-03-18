@@ -55,14 +55,14 @@ texifyTerm (Term a es) | isOne a && not (null exprs) = (fst (texifyAtom a), expr
                        | otherwise = (sign, atom ++ delimiter ++ exprs)
     where
       (sign, atom) = texifyAtom a
-      isOne (Atom k ds us e) = abs k == 1 && nullBundle ds && nullBundle us && F.all (== 0) e
+      isOne (Atom k ds us is e) = abs k == 1 && nullBundle ds && nullBundle us && nullBundle is && F.all (== 0) e
       delimiter = if null atom || null exprs then "" else " \\cdot "
       exprs = intercalate " \\cdot " $ texifyAndParen <$> es
       texifyAndParen e@(ExprC _ _) = "\\big[ " ++ texify e ++ " \\big]"
       texifyAndParen e@(ExprN _) = texify e
 
 texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, String)
-texifyAtom (Atom k deltas units expnt)
+texifyAtom (Atom k deltas units inds expnt)
   | nullBundle deltas
     && nullBundle units
     && F.all (== 0) expnt = (sign, texify absK)
@@ -71,12 +71,14 @@ texifyAtom (Atom k deltas units expnt)
     (if absK == 1 then [] else texify absK)
       ++ (unwords . map texifyDelta . toListBundle $ deltas)
       ++ (unwords . map texifyUnit . toListBundle $ units)
+      ++ (unwords . map texifyIndicator . toListBundle $ inds)
       ++ texifyExponent (IM.map negate expnt)
         where
           absK = abs k
           sign = if signum k == 1 then '+' else '-'
           texifyDelta d = "\\delta(" ++ texify d ++ ")"
           texifyUnit u = "\\theta(" ++ texify u ++ ")"
+          texifyIndicator i = "\\epsilon(" ++ texify i ++ ")"
           texifyExponent e = let vf = texifyVarForm e
                              in if null vf then [] else "e^{" ++ vf ++ "}"
 

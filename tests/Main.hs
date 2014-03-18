@@ -96,7 +96,7 @@ checkFactors factors xs opt = (== exprOne) . deepExpand . foldl product exprOne
                               . map fst . fst . runWriter
                               . factorsEliminate xs opt $ factors
   where
-    exprOne = ExprN (Term (Atom 1 emptyBundle emptyBundle IM.empty) [])
+    exprOne = ExprN (Term (Atom 1 emptyBundle emptyBundle emptyBundle IM.empty) [])
 
 prop_completeness :: Bool -> TreeDef -> Bool
 prop_completeness full def = all checkTree orders
