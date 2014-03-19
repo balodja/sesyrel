@@ -21,7 +21,7 @@ import Data.Monoid ((<>))
 import Data.List (sortBy)
 import GHC.Exts (build)
 import Data.Either (partitionEithers)
-import Sesyrel.Expression.Ratio (RealInfinite(..))
+import Sesyrel.Expression.Ratio (Rational, RealInfinite(..))
 
 import Prelude hiding (product)
 import qualified Prelude as Prelude (product)
@@ -68,7 +68,7 @@ substituteExp :: (RealInfinite a, Eq a) => Int -> Symbol a -> IntMap a -> (a, In
 substituteExp i (Constant c) vec | value == 0 = (1, vec)
                                  | otherwise = (specialExp (-value * c), IM.delete i vec)
                                    where value = IM.findWithDefault 0 i vec
-substituteExp i (Variable j) vec | vi == 0 = (1, vec)
+substituteExp i (Variable j) vec | i == j || vi == 0 = (1, vec)
                                  | otherwise = (1, IM.insert j (vi + vj) . IM.delete i $ vec)
                                    where vi = IM.findWithDefault 0 i vec
                                          vj = IM.findWithDefault 0 j vec
@@ -180,7 +180,7 @@ cancelUsAtom (Atom k1 deltas units inds expnt) =
       makeGood (u, n) = [ Atom 1 emptyBundle (singletonBundle u)
                           emptyBundle IM.empty
                         , Atom (1/(2^n) - 1/2) emptyBundle emptyBundle
-                          (singletonBundle (normalizeSymmetric u)) IM.empty
+                          (singletonBundle u) IM.empty
                         ]
       one = Atom 1 emptyBundle emptyBundle emptyBundle IM.empty
   in map (foldl productAtom atom) . sequence . ([one] :) . map makeGood . MS.toList $ unitsBad

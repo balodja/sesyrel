@@ -66,6 +66,7 @@ texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, String)
 texifyAtom (Atom k deltas units inds expnt)
   | nullBundle deltas
     && nullBundle units
+    && nullBundle inds
     && F.all (== 0) expnt = (sign, texify absK)
   | otherwise =
     (,) sign $
