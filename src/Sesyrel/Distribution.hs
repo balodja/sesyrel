@@ -108,7 +108,7 @@ factorsSimpleProcess name vv joint = do
 factorsEliminate :: MonadWriter [String] m => [Int] -> Bool -> [Factor] -> m [Factor]
 factorsEliminate elims algo factors =
   do
-    let order = if algo then findOrdering elims (map snd factors) else elims
+    let order = if algo then findOrdering Nothing elims (map snd factors) else elims
     tell ["Elimination order: " ++
           intercalate ", " (map show order), ""]
     let cliques = pretend order (map snd factors)

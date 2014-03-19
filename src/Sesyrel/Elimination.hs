@@ -8,6 +8,8 @@ import qualified Data.IntMap as IM
 
 type Graph = IntMap [Int]
 
+data Algorithm = MinFill | MinNeighbors
+
 pretend :: [Int] -> [[Int]] -> [[[Int]]]
 pretend [] cliques = [filter (not . null) cliques]
 pretend (v : vs) cliques =
@@ -16,16 +18,20 @@ pretend (v : vs) cliques =
       c = delete v . nub . sort . foldl union [] $ yes
   in cs : pretend vs (c : no)
 
-findOrdering :: [Int] -> [[Int]] -> [Int]
-findOrdering vars cliques = go vars (makeGraph cliques)
+findOrdering :: Maybe Algorithm -> [Int] -> [[Int]] -> [Int]
+findOrdering Nothing vars cliques = findOrdering (Just MinFill) vars cliques
+findOrdering (Just algo) vars cliques = go vars (makeGraph cliques)
   where
+    costFunction = case algo of
+      MinFill -> costFunctionMinFill
+      MinNeighbors -> costFunctionMinNeighbors
     go [] _ = []
-    go vs g = let v = getNextVertex vs g
+    go vs g = let v = getNextVertex costFunction vs g
               in v : go (delete v vs) (removeVertex v g)
 
-getNextVertex :: [Int] -> Graph -> Int
-getNextVertex vs g = let costs = map (costFunctionMinFill g) vs
-                     in (vs !!) . fromJust $ elemIndex (minimum costs) costs
+getNextVertex :: (Graph -> Int -> Int) -> [Int] -> Graph -> Int
+getNextVertex f vs g = let costs = map (f g) vs
+                       in (vs !!) . fromJust $ elemIndex (minimum costs) costs
 
 addClique :: [Int] -> Graph -> Graph
 addClique [] = id
@@ -55,3 +61,6 @@ costFunctionMinFill g v =
       inClique (a, b) = elem a neighs && elem b neighs
       neighEdges2 = length . filter inClique . concatMap edge $ neighs
   in n * (n - 1) - neighEdges2
+
+costFunctionMinNeighbors :: Graph -> Int -> Int
+costFunctionMinNeighbors g v = length . fromMaybe [] . IM.lookup v $ g
