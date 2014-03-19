@@ -21,7 +21,7 @@ import Data.Monoid ((<>))
 import Data.List (sortBy)
 import GHC.Exts (build)
 import Data.Either (partitionEithers)
-import Sesyrel.Expression.Ratio (Rational, RealInfinite(..))
+import Sesyrel.Expression.Ratio (RealInfinite(..))
 
 import Prelude hiding (product)
 import qualified Prelude as Prelude (product)

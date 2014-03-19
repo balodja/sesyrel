@@ -6,7 +6,7 @@ import Sesyrel.Expression.Base
 
 import Control.Applicative ((<$>))
 
-import Sesyrel.Expression.Ratio (Ratio, numerator, denominator)
+import Data.Ratio
 
 import Data.List (intercalate)
 import qualified Data.SignedMultiset as SM (toList)
