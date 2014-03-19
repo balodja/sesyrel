@@ -1,4 +1,4 @@
-module Sesyrel.Elimination (findOrdering, pretend) where
+module Sesyrel.Elimination (findOrdering, pretend, Algorithm) where
 
 import Data.List (partition, nub, sort, union, delete, elemIndex)
 import Data.Maybe (fromJust, fromMaybe)
@@ -8,23 +8,38 @@ import qualified Data.IntMap as IM
 
 type Graph = IntMap [Int]
 
-data Algorithm = MinFill | MinNeighbors
+data Algorithm = GraphMinFill | GraphMinNeighbors | MinCardinality
 
 pretend :: [Int] -> [[Int]] -> [[[Int]]]
 pretend [] cliques = [filter (not . null) cliques]
 pretend (v : vs) cliques =
   let cs = filter (not . null) cliques
-      (yes, no) = partition (elem v) cs
+      (c, rest) = escapeClique v cs
+  in cs : pretend vs (c : rest)
+
+escapeClique :: Int -> [[Int]] -> ([Int], [[Int]])
+escapeClique v cliques =
+  let (yes, no) = partition (elem v) cliques
       c = delete v . nub . sort . foldl union [] $ yes
-  in cs : pretend vs (c : no)
+  in (c, no)
 
 findOrdering :: Maybe Algorithm -> [Int] -> [[Int]] -> [Int]
-findOrdering Nothing vars cliques = findOrdering (Just MinFill) vars cliques
-findOrdering (Just algo) vars cliques = go vars (makeGraph cliques)
+findOrdering Nothing = findOrdering (Just MinCardinality)
+findOrdering (Just GraphMinFill) = findGraphOrdering costFunctionMinFill
+findOrdering (Just GraphMinNeighbors) = findGraphOrdering costFunctionMinFill
+findOrdering (Just MinCardinality) = findMinCardinalityOrdering
+
+findMinCardinalityOrdering :: [Int] -> [[Int]] -> [Int]
+findMinCardinalityOrdering [] _ = []
+findMinCardinalityOrdering vs cliques =
+  let costs = map (\v -> length . fst $ escapeClique v cliques) vs
+      v = (vs !!) . fromJust $ elemIndex (minimum costs) costs
+      (c, rest) = escapeClique v cliques
+  in v : findMinCardinalityOrdering (delete v vs) (c : rest)
+
+findGraphOrdering :: (Graph -> Int -> Int) -> [Int] -> [[Int]] -> [Int]
+findGraphOrdering costFunction vars cliques = go vars (makeGraph cliques)
   where
-    costFunction = case algo of
-      MinFill -> costFunctionMinFill
-      MinNeighbors -> costFunctionMinNeighbors
     go [] _ = []
     go vs g = let v = getNextVertex costFunction vs g
               in v : go (delete v vs) (removeVertex v g)
