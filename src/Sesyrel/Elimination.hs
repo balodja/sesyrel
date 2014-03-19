@@ -1,12 +1,20 @@
-module Sesyrel.Elimination (findOrdering) where
+module Sesyrel.Elimination (findOrdering, pretend) where
 
-import Data.List (delete, elemIndex)
+import Data.List (partition, nub, sort, union, delete, elemIndex)
 import Data.Maybe (fromJust, fromMaybe)
 
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IM
 
 type Graph = IntMap [Int]
+
+pretend :: [Int] -> [[Int]] -> [[[Int]]]
+pretend [] cliques = [filter (not . null) cliques]
+pretend (v : vs) cliques =
+  let cs = filter (not . null) cliques
+      (yes, no) = partition (elem v) cs
+      c = delete v . nub . sort . foldl union [] $ yes
+  in cs : pretend vs (c : no)
 
 findOrdering :: [Int] -> [[Int]] -> [Int]
 findOrdering vars cliques = go vars (makeGraph cliques)

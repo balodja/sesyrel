@@ -111,6 +111,10 @@ factorsEliminate elims algo factors =
     let order = if algo then findOrdering elims (map snd factors) else elims
     tell ["Elimination order: " ++
           intercalate ", " (map show order), ""]
+    let cliques = pretend order (map snd factors)
+    tell ["Clique history: "]
+    forM_ cliques $ \cs -> tell ["\\\\ $ " ++ intercalate "," (map show cs) ++ " $"]
+    tell [""]
     go factors order
   where
     go fs [] = return fs
