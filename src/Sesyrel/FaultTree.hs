@@ -9,6 +9,7 @@ module Sesyrel.FaultTree (
   , lambdaM
   , andM, orM
   , priorityAndOrM
+  , switchM
   ) where
 
 import Sesyrel.Distribution
@@ -72,6 +73,13 @@ priorityAndOrM a b c = do
 
 orM :: Int -> Int -> FaultTreeM Int
 orM = distributionTwoM distributionOr
+
+switchM :: Int -> Int -> Int -> FaultTreeM Int
+switchM s a b = do
+  var <- newVariableM
+  let expr = distributionSwitch var s a b
+  addFactorM (expr, [s, a, b, var])
+  return var
 
 {-
 cspM :: Rational -> Int -> FaultTreeM Int

@@ -6,7 +6,7 @@ module Sesyrel.Distribution (
   , distributionAnd
   , distributionOr
   , distributionPriorityAndOr
-  , distributionSwitcher
+  , distributionSwitch
   , Factor
   , factorsTell
   , factorsSimpleProcess
@@ -85,8 +85,8 @@ distributionPriorityAndOr x a b c =
       a3 = Atom 1 (makeSingle x c) (makeSingle a b) emptyBundle IM.empty
   in fromList [Term a1 [], Term a2 [], Term a3 []]
 
-distributionSwitcher :: (Num a, Ord a) => Int -> Int -> Int -> Int -> Expr a
-distributionSwitcher x s a b =
+distributionSwitch :: (Num a, Ord a) => Int -> Int -> Int -> Int -> Expr a
+distributionSwitch x s a b =
   let us1 = makeSingle s a `unionBundle` makeSingle b a
       us2 = makeSingle s a `unionBundle` makeSingle a b
       a1 = Atom 1 (makeSingle x b) us1 emptyBundle IM.empty

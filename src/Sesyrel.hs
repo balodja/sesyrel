@@ -80,40 +80,44 @@ escalatorFaultTree2 = do
   t <- andM section1 section2
   return [t]
 
-hydrosystemsM :: FaultTreeM [Int]
-hydrosystemsM = do
-  [engineL, engineR] <- replicateM 2 (lambdaM 282)
-  [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 1060)
-  [tank1, tank2, tank3] <- replicateM 3 (lambdaM 30)
-  [hydroPump1, hydroPump2, hydroPump3] <- replicateM 3 (lambdaM 125)
-  [electromotor1, electromotor2, electromotor3] <- replicateM 3 (lambdaM 100)
-  [pumpStation1, pumpStation2, pumpStation3] <- replicateM 3 (lambdaM 567)
+hydrosystemsM :: Bool -> FaultTreeM [Int]
+hydrosystemsM doValves = do
+  [engineL, engineR] <- replicateM 2 (lambdaM 30)
+  [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 100)
+  [tank1, tank2, tank3] <- replicateM 3 (lambdaM 3)
+  [hydroPump1, hydroPump2, hydroPump3] <- replicateM 3 (lambdaM 12)
+  [electromotor1, electromotor2, electromotor3] <- replicateM 3 (lambdaM 10)
+  [pumpStation1, pumpStation2, pumpStation3] <- replicateM 3 (lambdaM 60)
+  [valve1, valve2, valve3] <- replicateM 3 (lambdaM 10)
   
   electroSysL <- orM engineL electroGrpL
   electroSysR <- orM engineL electroGrpR
   electroSys <- andM electroSysL electroSysR
   
-  hydro2Main <- orM electromotor2 pumpStation1 >>= orM electroSys
+  hydro2Main <- orM electromotor2 pumpStation2 >>= orM electroSys
   let hydro2Res = hydroPump2
-  hydro2 <- andM hydro2Main hydro2Res >>= orM tank2
+      swM v = if doValves then switchM v else andM
+  hydro2 <- swM valve2 hydro2Main hydro2Res >>= orM tank2
   
   hydro1Main <- orM hydroPump1 engineL
   hydro3Main <- orM hydroPump3 engineR
   hydro1Res <- orM pumpStation1 electromotor1 >>= orM electroSys
   hydro3Res <- orM pumpStation3 electromotor3 >>= orM electroSys
-  hydro1 <- andM hydro1Main hydro1Res >>= orM tank1
-  hydro3 <- andM hydro3Main hydro3Res >>= orM tank3
+  hydro1 <- swM valve1 hydro1Main hydro1Res >>= orM tank1
+  hydro3 <- swM valve3 hydro3Main hydro3Res >>= orM tank3
   return [hydro1, hydro2, hydro3]
 
-actuationsM :: [Int] -> FaultTreeM [Int]
-actuationsM [hydro1, hydro2, hydro3] = do
+actuationsM :: Bool -> [Int] -> FaultTreeM [Int]
+actuationsM doValves [hydro1, hydro2, hydro3] = do
   [ccu1, ccu2, ccu3, ccu4] <- replicateM 4 (lambdaM 50)
   [steer1, steer2, steer3, steer4] <- replicateM 4 (lambdaM 15)
+  [valve1, valve2] <- replicateM 2 (lambdaM 10)
+  let swM v = if doValves then switchM v else andM
   channel1 <- orM hydro1 ccu1 >>= orM steer1
   channel2 <- orM hydro2 ccu2 >>= orM steer2
   channel3 <- orM hydro2 ccu3 >>= orM steer3
   channel4 <- orM hydro3 ccu4 >>= orM steer4
-  elevator1 <- andM channel1 channel2
-  elevator2 <- andM channel3 channel4
+  elevator1 <- swM valve1 channel1 channel2
+  elevator2 <- swM valve2 channel3 channel4
   elevator <- andM elevator1 elevator2
   return [elevator]
