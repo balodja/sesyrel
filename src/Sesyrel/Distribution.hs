@@ -6,6 +6,7 @@ module Sesyrel.Distribution (
   , distributionAnd
   , distributionOr
   , distributionPriorityAndOr
+  , distributionSwitcher
   , Factor
   , factorsTell
   , factorsSimpleProcess
@@ -38,6 +39,9 @@ calcMttf var = sum . map mapTerm . toList
                                            | otherwise =
                                              error "calcMttf: too complex expr"
     mapTerm (Term _ _) = error "calcMttf: expr is not atomized"
+
+calcDistribution :: (Ord a, Fractional a, Texifiable a, RealInfinite a) => Int -> Expr a -> Expr a
+calcDistribution v e = substitute (-1) (Variable v) $ integrate e v (Constant 0) (Variable (-1))
 
 distributionLambda :: Num a => Int -> a -> Expr a
 distributionLambda variable lambda =
@@ -81,6 +85,15 @@ distributionPriorityAndOr x a b c =
       a3 = Atom 1 (makeSingle x c) (makeSingle a b) emptyBundle IM.empty
   in fromList [Term a1 [], Term a2 [], Term a3 []]
 
+distributionSwitcher :: (Num a, Ord a) => Int -> Int -> Int -> Int -> Expr a
+distributionSwitcher x s a b =
+  let us1 = makeSingle s a `unionBundle` makeSingle b a
+      us2 = makeSingle s a `unionBundle` makeSingle a b
+      a1 = Atom 1 (makeSingle x b) us1 emptyBundle IM.empty
+      a2 = Atom 1 (makeSingle x a) us2 emptyBundle IM.empty
+      a3 = Atom 1 (makeSingle x a) (makeSingle a s) emptyBundle IM.empty
+  in fromList [Term a1 [], Term a2 [], Term a3 []]
+
 factorsTell :: MonadWriter [String] m => [Factor] -> m ()
 factorsTell factors = do
   tell ["\\subsection{Factors}", ""]
@@ -97,11 +110,13 @@ factorsSimpleProcess name vv joint = do
   constant <- factorsMarginalize [] marginal
   let p = deepExpand . foldl1 product .  map fst $ constant
   tell ["\\subsection{Results}", ""]
-  tell ["$ p(F) = " ++ texify p ++ " $"]
+  tell ["$ F(\\infty) = " ++ texify p ++ " $"]
   case vv of
     Left [lastVar] -> do
-      let mttf = calcMttf lastVar (deepExpand . foldl1 product . map fst $ marginal)
-      tell [", $ MTTF = " ++ texify mttf ++ " $"]
+      let marginalized = deepExpand . foldl1 product . map fst $ marginal
+          mttf = calcMttf lastVar marginalized
+          distr = calcDistribution lastVar marginalized
+      tell [", $ F(x_{" ++ show lastVar ++ "}) = " ++ texify distr ++ "$ , $ MTTF = " ++ texify mttf ++ " $"]
     _ -> return ()
   tell [""]
 
