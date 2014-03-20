@@ -31,9 +31,9 @@ type Factor = (Expr Rational, [Int])
 calcMttf :: (Eq a, Fractional a) => Int -> Expr a -> a
 calcMttf var = sum . map mapTerm . toList
   where
-    checkAtom (Atom _ ds us expnt) =
-      nullBundle ds && nullBundle us && F.all (== 0) (IM.delete var expnt)
-    mapTerm (Term a@(Atom k _ _ expnt) []) | checkAtom a =
+    checkAtom (Atom _ ds us is expnt) =
+      nullBundle ds && nullBundle us && nullBundle is && F.all (== 0) (IM.delete var expnt)
+    mapTerm (Term a@(Atom k _ _ _ expnt) []) | checkAtom a =
       k / (fromMaybe (error "calcMttf: lookup fail") (IM.lookup var expnt)) ^ (2 :: Integer)
                                            | otherwise =
                                              error "calcMttf: too complex expr"
@@ -42,7 +42,7 @@ calcMttf var = sum . map mapTerm . toList
 distributionLambda :: Num a => Int -> a -> Expr a
 distributionLambda variable lambda =
   let expnt = IM.singleton variable lambda
-  in ExprN $ Term (Atom lambda emptyBundle emptyBundle expnt) []
+  in ExprN $ Term (Atom lambda emptyBundle emptyBundle emptyBundle expnt) []
 
 {-
 -- should not be used
@@ -54,32 +54,32 @@ distributionCspLambda varB lambda varA =
 
 distributionAnd :: (Num a, Ord a) => Int -> Int -> Int -> Expr a
 distributionAnd x a b =
-  let a1 = Atom 1 (makeSingle x b) (makeSingle b a) IM.empty
-      a2 = Atom 1 (makeSingle x a) (makeSingle a b) IM.empty
-  in normalizeDs $ ExprC (Term a1 []) (ExprN (Term a2 []))
+  let a1 = Atom 1 (makeSingle x b) (makeSingle b a) emptyBundle IM.empty
+      a2 = Atom 1 (makeSingle x a) (makeSingle a b) emptyBundle IM.empty
+  in ExprC (Term a1 []) (ExprN (Term a2 []))
 
 distributionOr :: (Num a, Ord a) => Int -> Int -> Int -> Expr a
 distributionOr x a b =
-  let a1 = Atom 1 (makeSingle x a) (makeSingle b a) IM.empty
-      a2 = Atom 1 (makeSingle x b) (makeSingle a b) IM.empty
-  in normalizeDs $ ExprC (Term a1 []) (ExprN (Term a2 []))
+  let a1 = Atom 1 (makeSingle x a) (makeSingle b a) emptyBundle IM.empty
+      a2 = Atom 1 (makeSingle x b) (makeSingle a b) emptyBundle IM.empty
+  in ExprC (Term a1 []) (ExprN (Term a2 []))
 
 {-
 -- should not be used
 distributionPriorityAnd :: (Num a, Ord a) => Int -> Int -> Int -> Expr a
 distributionPriorityAnd x a b =
   let atom = Atom 1 (makeSingle x b) (makeSingle b a) IM.empty
-  in normalizeDs $ ExprN (Term atom [])
+  in ExprN (Term atom [])
 -}
 
 distributionPriorityAndOr :: (Num a, Ord a) => Int -> Int -> Int -> Int -> Expr a
 distributionPriorityAndOr x a b c =
   let us1 = makeSingle b a `unionBundle` makeSingle c b
       us2 = makeSingle b a `unionBundle` makeSingle b c
-      a1 = Atom 1 (makeSingle x b) us1 IM.empty
-      a2 = Atom 1 (makeSingle x c) us2 IM.empty
-      a3 = Atom 1 (makeSingle x c) (makeSingle a b) IM.empty
-  in normalizeDs $ fromList [Term a1 [], Term a2 [], Term a3 []]
+      a1 = Atom 1 (makeSingle x b) us1 emptyBundle IM.empty
+      a2 = Atom 1 (makeSingle x c) us2 emptyBundle IM.empty
+      a3 = Atom 1 (makeSingle x c) (makeSingle a b) emptyBundle IM.empty
+  in fromList [Term a1 [], Term a2 [], Term a3 []]
 
 factorsTell :: MonadWriter [String] m => [Factor] -> m ()
 factorsTell factors = do
@@ -108,9 +108,13 @@ factorsSimpleProcess name vv joint = do
 factorsEliminate :: MonadWriter [String] m => [Int] -> Bool -> [Factor] -> m [Factor]
 factorsEliminate elims algo factors =
   do
-    let order = if algo then findOrdering elims (map snd factors) else elims
+    let order = if algo then findOrdering Nothing elims (map snd factors) else elims
     tell ["Elimination order: " ++
           intercalate ", " (map show order), ""]
+    let cliques = pretend order (map snd factors)
+    tell ["Clique history: "]
+    forM_ cliques $ \cs -> tell ["\\\\ $ " ++ intercalate "," (map show cs) ++ " $"]
+    tell [""]
     go factors order
   where
     go fs [] = return fs
@@ -128,7 +132,7 @@ factorsEliminateVariable var factors = do
   factorsTell factors
   tell ["\\subsection{Integration of $x_{" ++ show var ++ "}$}", ""]
   let (varFactors, restFactors) = partition (elem var . snd) factors
-      expr = ExprN (Term (Atom 1 emptyBundle emptyBundle IM.empty) (map fst varFactors))
+      expr = ExprN (Term (Atom 1 emptyBundle emptyBundle emptyBundle IM.empty) (map fst varFactors))
   tell ["$ " ++ "\\int\\limits_0^{+\\infty} "
         ++ texify expr ++ "\\textrm{dx}_{" ++ show var
         ++ "} = \\ldots $", ""]

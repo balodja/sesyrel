@@ -6,6 +6,8 @@ module Sesyrel.Expression.Ratio (
   denominator,
   (%)) where
 
+import Sesyrel.Expression.RealInfinite
+
 import Prelude hiding (Rational)
 import qualified Data.Ratio as R (numerator, denominator, (%))
 
@@ -57,13 +59,6 @@ instance (Num a, Ord a) => Ord (Ratio a) where
 
 instance Integral a => Real (Ratio a) where
   toRational (p :% q) = toInteger p R.% toInteger q
-
-class Num a => RealInfinite a where
-  plusInfinity :: a
-  minusInfinity :: a
-  minusInfinity = negate plusInfinity
-  nan :: a
-  nan = plusInfinity - plusInfinity
 
 instance Integral a => RealInfinite (Ratio a) where
   plusInfinity = 1 :% 0

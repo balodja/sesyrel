@@ -23,11 +23,11 @@ integrate expr val lo hi = fst . runWriter $ integrateM expr val lo hi
 
 integrateM :: (RealInfinite a, Fractional a, Ord a, Texifiable a, MonadWriter [String] m) => Expr a -> Int -> Limit a -> Limit a -> m (Expr a)
 integrateM expr var lo hi = do
-  let filterAtoms = filter (\(Atom k _ _ _) -> k /= 0)
+  let filterAtoms = filter (\(Atom k _ _ _ _) -> k /= 0)
       integrateTermM (Term atom _) = do
         tell ["\\paragraph{Atom}"]
         let integrated = integrateAtom atom var lo hi
-            simplified = filterAtoms . map cancelUsAtom $ integrated
+            simplified = filterAtoms . concatMap (cancelUsAtom . unifyAtom) $ integrated
             exprBefore = ExprN (Term atom [])
             exprDuring = fromList [Term a [] | a <- integrated]
             exprAfter = fromList [Term a [] | a <- simplified]
@@ -44,10 +44,10 @@ integrateM expr var lo hi = do
   return $ fromList [Term a [] | a <- atoms]
 
 integrateAtom :: (RealInfinite a, Fractional a, Ord a) => Atom a -> Int -> Limit a -> Limit a -> [Atom a]
-integrateAtom (Atom k deltas units expnt) var lo hi =
-  fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> Just intExp
+integrateAtom (Atom k deltas units indctrs expnt) var lo hi =
+  fromJust $ intEqualLimits <|> intDelta <|> intUnit <|> intInd <|> Just intExp
     where
-      intEqualLimits | lo == hi = Just [Atom 0 emptyBundle emptyBundle IM.empty]
+      intEqualLimits | lo == hi = Just [Atom 0 emptyBundle emptyBundle emptyBundle IM.empty]
                      | otherwise = Nothing
       
       intDelta = case findDiff var deltas of
@@ -55,7 +55,7 @@ integrateAtom (Atom k deltas units expnt) var lo hi =
         Just d ->
           let sym = calcSubstitution d
               us1 = calcDeltaUnits sym
-              a = Atom k (deleteDiff d deltas) (unionBundle us1 units) expnt
+              a = Atom k (deleteDiff d deltas) (unionBundle us1 units) indctrs expnt
           in Just [substitute var sym a]
       
       calcSubstitution (DiffSym (Variable x) (Variable y))
@@ -76,14 +76,18 @@ integrateAtom (Atom k deltas units expnt) var lo hi =
           higher y@(Constant c) | c == plusInfinity = emptyBundle
                                 | otherwise = singletonBundle (DiffSym y vec)
 
+      intInd = case findDiff var indctrs of
+        Nothing -> Nothing
+        Just _ -> Just [Atom 0 emptyBundle emptyBundle emptyBundle IM.empty]
+
       intExp = let lambda = fromMaybe (error "integrateAtom: intExp failed") (IM.lookup var expnt)
                    subLimit a (Constant c)
-                     | c == plusInfinity = Atom 0 emptyBundle emptyBundle IM.empty
+                     | c == plusInfinity = Atom 0 emptyBundle emptyBundle emptyBundle IM.empty
                      | c == 0 = substitute var (Constant 0) a
                      | otherwise = error "intExp: strange constant in limits"
                    subLimit a sym = substitute var sym a
-               in [ subLimit (Atom (-k / lambda) deltas units expnt) hi
-                  , subLimit (Atom (k / lambda) deltas units expnt) lo
+               in [ subLimit (Atom (-k / lambda) deltas units indctrs expnt) hi
+                  , subLimit (Atom (k / lambda) deltas units indctrs expnt) lo
                   ]
       
       intUnit = case findDiff var units of
@@ -94,26 +98,26 @@ integrateAtom (Atom k deltas units expnt) var lo hi =
           Constant c | c == plusInfinity ->
             let us1 = DiffSym y lo `insertDiff` us
                 us2 = DiffSym lo y `insertDiff` us
-            in integrateAtom (Atom k deltas us1 expnt) var y (Constant c)
-               ++ integrateAtom (Atom k deltas us2 expnt) var lo (Constant c)
+            in integrateAtom (Atom k deltas us1 indctrs expnt) var y (Constant c)
+               ++ integrateAtom (Atom k deltas us2 indctrs expnt) var lo (Constant c)
                      | otherwise -> error "integrateAtom: const at higher limit? no wai"
           higherLimit ->
             let u1 = DiffSym higherLimit y
                 u2 = DiffSym y lo
                 us1 = u1 `insertDiff` (u2 `insertDiff` us)
                 us2 = DiffSym lo y `insertDiff` us
-            in integrateAtom (Atom k deltas us1 expnt) var y hi
-               ++ integrateAtom (Atom k deltas us2 expnt) var lo hi
+            in integrateAtom (Atom k deltas us1 indctrs expnt) var y hi
+               ++ integrateAtom (Atom k deltas us2 indctrs expnt) var lo hi
                        | otherwise =
         case hi of
           Constant c | c == plusInfinity ->
             let us1 = DiffSym x lo `insertDiff` us
-            in integrateAtom (Atom k deltas us1 expnt) var lo x
+            in integrateAtom (Atom k deltas us1 indctrs expnt) var lo x
                      | otherwise -> error "integrateAtom: const at higher limit? no wai"
           higherLimit ->
             let u1 = DiffSym x lo
                 u2 = DiffSym higherLimit x
                 us1 = u1 `insertDiff` (u2 `insertDiff` us)
                 us2 = DiffSym x higherLimit `insertDiff` us
-            in integrateAtom (Atom k deltas us1 expnt) var lo x
-               ++ integrateAtom (Atom k deltas us2 expnt) var lo hi
+            in integrateAtom (Atom k deltas us1 indctrs expnt) var lo x
+               ++ integrateAtom (Atom k deltas us2 indctrs expnt) var lo hi

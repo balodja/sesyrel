@@ -1,11 +1,13 @@
 module Sesyrel.Expression (
     module Sesyrel.Expression.Base
-  , module Sesyrel.Expression.Ratio
+  , module Data.Ratio
   , module Sesyrel.Expression.Texify
   , module Sesyrel.Expression.Integration
+  , module Sesyrel.Expression.RealInfinite
   ) where
 
 import Sesyrel.Expression.Base
-import Sesyrel.Expression.Ratio
+import Data.Ratio
 import Sesyrel.Expression.Texify
 import Sesyrel.Expression.Integration
+import Sesyrel.Expression.RealInfinite
