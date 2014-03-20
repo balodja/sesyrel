@@ -73,27 +73,24 @@ escalatorFaultTree2 = do
 hydrosystemsM :: FaultTreeM [Int]
 hydrosystemsM = do
   [engineL, engineR] <- replicateM 2 (lambdaM 282)
-  [generatorL, generatorR] <- replicateM 2 (lambdaM 125)
-  [electroGrp1, electroGrp2] <- replicateM 2 (lambdaM 1060)
+  [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 1060)
   [tank1, tank2, tank3] <- replicateM 3 (lambdaM 30)
   [hydroPump1, hydroPump2, hydroPump3] <- replicateM 3 (lambdaM 125)
-  [electromotor1, electromotor2, electromotor3, electromotor4] <- replicateM 4 (lambdaM 100)
-  [pumpStation1, pumpStation2, pumpStation3, pumpStation4] <- replicateM 4 (lambdaM 567)
-  accumulator <- lambdaM 30
+  [electromotor1, electromotor2, electromotor3] <- replicateM 3 (lambdaM 100)
+  [pumpStation1, pumpStation2, pumpStation3] <- replicateM 3 (lambdaM 567)
   
-  electroSys1 <- orM engineL generatorL >>= orM electroGrp1
-  electroSys2 <- orM engineL generatorR >>= orM electroGrp2
-  electroSys <- andM electroSys1 electroSys2
+  electroSysL <- orM engineL electroGrpL
+  electroSysR <- orM engineL electroGrpR
+  electroSys <- andM electroSysL electroSysR
   
-  hydro2Main <- orM electroSys electromotor2 >>= orM pumpStation2
-  hydro2Res1 <- orM accumulator electromotor4 >>= orM pumpStation4
-  let hydro2Res2 = hydroPump2
-  hydro2 <- andM hydro2Main hydro2Res1 >>= andM hydro2Res2 >>= orM tank2
+  hydro2Main <- orM electromotor2 pumpStation1 >>= orM electroSys
+  let hydro2Res = hydroPump2
+  hydro2 <- andM hydro2Main hydro2Res >>= orM tank2
   
   hydro1Main <- orM hydroPump1 engineL
   hydro3Main <- orM hydroPump3 engineR
-  hydro1Res <- orM electroSys electromotor1 >>= orM pumpStation1
-  hydro3Res <- orM electroSys electromotor3 >>= orM pumpStation3
+  hydro1Res <- orM pumpStation1 electromotor1 >>= orM electroSys
+  hydro3Res <- orM pumpStation3 electromotor3 >>= orM electroSys
   hydro1 <- andM hydro1Main hydro1Res >>= orM tank1
   hydro3 <- andM hydro3Main hydro3Res >>= orM tank3
   return [hydro1, hydro2, hydro3]
