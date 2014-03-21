@@ -100,7 +100,7 @@ factorsTell factors = do
   let fellers = map (\(expr, _) -> tell ["$ " ++ texify expr ++ " $"]) factors
   sequence_ (intersperse (tell [","]) fellers)
 
-factorsSimpleProcess :: MonadWriter [String] m => String -> Either [Int] [Int] -> [Factor] -> m ()
+factorsSimpleProcess :: MonadWriter [String] m => String -> Either [Int] [Int] -> [Factor] -> m ([Factor], Maybe (Expr Rational))
 factorsSimpleProcess name vv joint = do
   tell ["\\section{" ++ name ++ "}", ""]
   marginal <- either
@@ -111,14 +111,16 @@ factorsSimpleProcess name vv joint = do
   let p = deepExpand . foldl1 product .  map fst $ constant
   tell ["\\subsection{Results}", ""]
   tell ["$ F(\\infty) = " ++ texify p ++ " $"]
-  case vv of
+  distr <- case vv of
     Left [lastVar] -> do
       let marginalized = deepExpand . foldl1 product . map fst $ marginal
           mttf = calcMttf lastVar marginalized
           distr = calcDistribution lastVar marginalized
       tell [", $ F(x_{" ++ show lastVar ++ "}) = " ++ texify distr ++ "$ , $ MTTF = " ++ texify mttf ++ " $"]
-    _ -> return ()
+      return (Just distr)
+    _ -> return Nothing
   tell [""]
+  return (marginal, distr)
 
 factorsEliminate :: MonadWriter [String] m => [Int] -> Bool -> [Factor] -> m [Factor]
 factorsEliminate elims algo factors =

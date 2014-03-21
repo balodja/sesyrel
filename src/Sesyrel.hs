@@ -1,25 +1,49 @@
 import Sesyrel.FaultTree
 import Sesyrel.Distribution
+import Sesyrel.Expression (evalExpr, mapExprType)
 
 import Control.Monad.Writer.Strict
 
 import Prelude hiding (Rational)
 import System.IO (withFile, hFlush, hPutStrLn, IOMode(..))
 
+import Data.Maybe (fromJust)
+import Data.List (elemIndex)
+import qualified Data.IntMap as IM (singleton)
+
+import Text.Printf (printf)
+
+
 main :: IO ()
 main = do
-  let doIt (name, mbOrder, ftreeM) = let (vars, FaultTree _ factors) = evalFaultTreeM ftreeM
-                                     in case mbOrder of
-                                       Nothing -> factorsSimpleProcess name (Left vars) factors
-                                       Just vs -> factorsSimpleProcess name (Right vs) factors
+  let doIt (name, mbOrder, ftreeM, points) =
+        let (vars, FaultTree _ factors) = evalFaultTreeM ftreeM
+            doIntegral = case mbOrder of
+              Nothing -> factorsSimpleProcess name (Left vars) factors
+              Just vs -> factorsSimpleProcess name (Right vs) factors
+            elemSplit x l = splitAt (fromJust $ elemIndex x l) l
+            texifyDouble x = let (l, r) = elemSplit 'e' (printf "%.3e" x)
+                             in if r == "e0" then l else l ++ " \\cdot 10^{" ++ tail r ++ "}"
+            texifyPoint p v = do
+              tell ["\\\\  $ F(" ++ texifyDouble p ++ ") = " ++ texifyDouble v ++ " $"]
+        in do
+          (_, mbExpr) <- doIntegral
+          case mbExpr of
+            Nothing -> return ()
+            Just expr -> do
+              let expr' = mapExprType fromRational expr
+              tell ["Evaluation of some points in distribution:"]
+              forM_ points $ \p ->
+                texifyPoint p (evalExpr expr' (IM.singleton 0 p))
+              tell [""]
   withFile "output.tex" WriteMode $ \h -> do
     let putLine l = hPutStrLn h l >> hFlush h
     mapM_ putLine . execWriter . mapM_ doIt $ trees
 
-trees :: [(String, Maybe [Int], FaultTreeM [Int])]
+trees :: [(String, Maybe [Int], FaultTreeM [Int], [Double])]
 trees =
-  [ ("ftree1", Nothing, simpleFaultTreeM)
-  , ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM)
+  [ ("ftree1", Nothing, simpleFaultTreeM, [1, 3])
+  , ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM, [])
   ]
 
 testTreeM :: FaultTreeM [Int]

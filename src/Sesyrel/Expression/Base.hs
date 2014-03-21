@@ -4,6 +4,7 @@ module Sesyrel.Expression.Base (
     Expr(..), Term(..) , Atom(..)
   , Symbol(..), DiffSym(..)
   , toList, fromList
+  , mapExprType, evalExpr
   , normalizeDs, normalizeUs
   , Substitutable(..)
   , Bundle(..), singletonBundle
@@ -20,6 +21,7 @@ import Data.Monoid ((<>))
 
 import Data.List (sortBy)
 import GHC.Exts (build)
+import Data.Maybe (fromMaybe)
 import Data.Either (partitionEithers)
 import Sesyrel.Expression.Ratio (RealInfinite(..))
 
@@ -33,7 +35,7 @@ import Data.SignedMultiset (SignedMultiset)
 import qualified Data.SignedMultiset as MS
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM
-  (empty, delete, insert, findWithDefault, unionWith)
+  (empty, delete, insert, findWithDefault, unionWith, lookup, toList, map)
 
 data Expr a = ExprC !(Term a) !(Expr a)
             | ExprN !(Term a)
@@ -103,6 +105,12 @@ instance Ord a => Ord (DiffSym a) where
 instance Substitutable DiffSym where
   substitute i s (DiffSym x y) = DiffSym (substitute i s x) (substitute i s y)
 
+mapDiffSymType :: (a -> b) -> DiffSym a -> DiffSym b
+mapDiffSymType f (DiffSym s1 s2) = DiffSym (g s1) (g s2)
+  where
+    g (Constant c) = Constant $ f c
+    g (Variable i) = Variable i
+
 specialExp :: (RealInfinite a, Eq a) => a -> a
 specialExp x | x == 0 = 1 
              | x == plusInfinity = plusInfinity
@@ -118,8 +126,31 @@ fromList (t : []) = ExprN t
 fromList (t : ts) = ExprC t (fromList ts)
 fromList [] = ExprN (Term (Atom 0 emptyBundle emptyBundle emptyBundle IM.empty) [])
 
-mapExpr :: Num a => (Term a -> Term a) -> Expr a -> Expr a
+mapExpr :: (Num a, Num b) => (Term a -> Term b) -> Expr a -> Expr b
 mapExpr f = fromList . map f . toList
+
+mapExprType :: (Num a, Ord a, Num b, Ord b) => (a -> b) -> Expr a -> Expr b
+mapExprType f = mapExprType'
+  where
+    mapExprType' = mapExpr mapTermType
+    mapTermType (Term a es) = Term (mapAtomType a) (map mapExprType' es)
+    mapAtomType (Atom k ds us es expnt) = Atom (f k) (mapBundle f ds) (mapBundle f us) (mapBundle f es) (IM.map f expnt)
+
+evalExpr :: (Floating a, Ord a, RealInfinite a) => Expr a -> IntMap a -> a
+evalExpr e v = evalExpr' e
+  where
+    getValue i = fromMaybe (error "evalExpr: not enough assingments") $ IM.lookup i v
+    evalExpr' = sum . map evalTerm . toList
+    evalTerm (Term a es) = evalAtom a * Prelude.product (map evalExpr' es)
+    evalAtom (Atom k ds us is expnt) = k * evalDs ds * evalUs us * evalIs is * evalExpnt expnt
+    evalBundle f = Prelude.product . map (f . subValues) . toListBundle
+    subSym (Variable i) = getValue i
+    subSym (Constant c) = c
+    subValues (DiffSym s1 s2) = subSym s1 - subSym s2
+    evalDs = evalBundle (\x -> if x == 0 then plusInfinity else 0)
+    evalUs = evalBundle (\x -> case compare x 0 of { LT -> 0; EQ -> 1 / 2; GT -> 1})
+    evalIs = evalBundle (\x -> if x == 0 then 1 else 0)
+    evalExpnt = exp . negate . sum . map (\(i, lam) -> getValue i * lam) . IM.toList
 
 normalizeDs :: (Num a, Ord a) => Expr a -> Expr a
 normalizeDs = mapExpr normalizeDsTerm
@@ -237,6 +268,7 @@ class Substitutable e where
 class Bundle e where
   emptyBundle :: e a
   nullBundle :: e a -> Bool
+  mapBundle :: (Ord a, Ord b) => (a -> b) -> e a -> e b
   unionBundle :: Ord a => e a -> e a -> e a
   toListBundle :: e a -> [DiffSym a]
   fromListBundle :: Ord a => [DiffSym a] -> e a
@@ -256,6 +288,7 @@ instance Substitutable DeltaBundle where
 instance Bundle DeltaBundle where
   emptyBundle = DeltaBundle S.empty
   nullBundle (DeltaBundle ds) = S.null ds
+  mapBundle f (DeltaBundle ds) = DeltaBundle $ S.map (mapDiffSymType f) ds
   unionBundle (DeltaBundle a) (DeltaBundle b) = DeltaBundle $ S.union a b
   toListBundle (DeltaBundle ds) = S.toList ds
   fromListBundle ds = DeltaBundle . S.fromList . map normalizeSymmetric $ds
@@ -281,6 +314,7 @@ instance Substitutable UnitBundle where
 instance Bundle UnitBundle where
   emptyBundle = UnitBundle MS.empty
   nullBundle (UnitBundle us) = MS.null us
+  mapBundle f (UnitBundle ds) = UnitBundle $ MS.map (mapDiffSymType f) ds
   unionBundle (UnitBundle a) (UnitBundle b) = UnitBundle $ MS.additiveUnion a b
   toListBundle (UnitBundle us) = fst . MS.toLists $ us
   fromListBundle us = UnitBundle $ MS.fromLists us []
@@ -323,6 +357,7 @@ instance Substitutable IndicatorBundle where
 instance Bundle IndicatorBundle where
   emptyBundle = IndicatorBundle S.empty
   nullBundle (IndicatorBundle is) = S.null is
+  mapBundle f (IndicatorBundle ds) = IndicatorBundle $ S.map (mapDiffSymType f) ds
   unionBundle (IndicatorBundle a) (IndicatorBundle b) = IndicatorBundle $ S.union a b
   toListBundle (IndicatorBundle is) = S.toList is
   fromListBundle is = IndicatorBundle . S.fromList . map normalizeSymmetric $ is

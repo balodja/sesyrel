@@ -14,3 +14,6 @@ class Num a => RealInfinite a where
 
 instance Integral a => RealInfinite (Ratio a) where
   plusInfinity = 1 :% 0
+
+instance RealInfinite Double where
+  plusInfinity = 1 / 0
