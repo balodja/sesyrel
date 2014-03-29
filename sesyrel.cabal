@@ -1,15 +1,10 @@
 Name:			sesyrel
 Version:		0.1
-Description:		Just a test
+Description:		Analytical integration of (a little bit) dynamic fault trees
 Author:			Vladimir Koroljov
 Maintainer:		balodja@gmail.com
 Build-Type:		Simple
 Cabal-Version:		>= 1.8
-
---Library
---  Hs-Source-Dirs:   lib
---  Exposed-Modules:  Lib
---  Build-Depends:	base >= 4, mtl >= 2, containers, vector
 
 Executable sesyrel
   Main-is:		Sesyrel.hs
