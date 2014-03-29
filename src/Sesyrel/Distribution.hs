@@ -114,9 +114,9 @@ factorsSimpleProcess name vv joint = do
   distr <- case vv of
     Left [lastVar] -> do
       let marginalized = deepExpand . foldl1 product . map fst $ marginal
-          mttf = calcMttf lastVar marginalized
+          mttf = fromRational $ calcMttf lastVar marginalized
           distr = calcDistribution lastVar marginalized
-      tell [", $ F(x_{" ++ show lastVar ++ "}) = " ++ texify distr ++ "$ , $ MTTF = " ++ texify mttf ++ " $"]
+      tell [", $ F(x_{" ++ show lastVar ++ "}) = " ++ texify distr ++ "$ , $ MTTF = " ++ texifyDoubleE 3 mttf ++ " $"]
       return (Just distr)
     _ -> return Nothing
   tell [""]

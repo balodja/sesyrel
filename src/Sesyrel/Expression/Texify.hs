@@ -1,6 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 
-module Sesyrel.Expression.Texify (Texifiable(..)) where
+module Sesyrel.Expression.Texify (Texifiable(..), texifyDoubleE) where
 
 import Sesyrel.Expression.Base
 
@@ -8,11 +8,14 @@ import Control.Applicative ((<$>))
 
 import Data.Ratio
 
-import Data.List (intercalate)
+import Data.Maybe (fromJust)
+import Data.List (intercalate, elemIndex)
 import qualified Data.SignedMultiset as SM (toList)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM (map, toList)
 import qualified Data.Foldable as F (all)
+
+import Text.Printf (printf)
 
 class Texifiable a where
   texify :: a -> String
@@ -25,6 +28,11 @@ instance Texifiable Int where
 
 instance Texifiable Double where
   texify = show
+
+texifyDoubleE :: Int -> Double -> String
+texifyDoubleE n x = let (l, r) = elemSplit 'e' (printf ("%." ++ show n ++ "e") x)
+                        elemSplit y ys = splitAt (fromJust $ elemIndex y ys) ys
+                    in if r == "e0" then l else l ++ " \\cdot 10^{" ++ tail r ++ "}"
 
 instance (Integral a, Texifiable a) => Texifiable (Ratio a) where
   texify z = let y = denominator z

@@ -1,17 +1,13 @@
 import Sesyrel.FaultTree
 import Sesyrel.Distribution
-import Sesyrel.Expression (evalExpr, mapExprType)
+import Sesyrel.Expression (evalExpr, mapExprType, texifyDoubleE)
 
 import Control.Monad.Writer.Strict
 
 import Prelude hiding (Rational)
 import System.IO (withFile, hFlush, hPutStrLn, IOMode(..))
 
-import Data.Maybe (fromJust)
-import Data.List (elemIndex)
 import qualified Data.IntMap as IM (singleton)
-
-import Text.Printf (printf)
 
 
 main :: IO ()
@@ -21,11 +17,9 @@ main = do
             doIntegral = case mbOrder of
               Nothing -> factorsSimpleProcess name (Left vars) factors
               Just vs -> factorsSimpleProcess name (Right vs) factors
-            elemSplit x l = splitAt (fromJust $ elemIndex x l) l
-            texifyDouble x = let (l, r) = elemSplit 'e' (printf "%.3e" x)
-                             in if r == "e0" then l else l ++ " \\cdot 10^{" ++ tail r ++ "}"
-            texifyPoint p v = do
-              tell ["\\\\  $ F(" ++ texifyDouble p ++ ") = " ++ texifyDouble v ++ " $"]
+            texifyPoint p v =
+              tell
+              ["\\\\  $ F(" ++ texifyDoubleE 3 p ++ ") = " ++ texifyDoubleE 3 v ++ " $"]
         in do
           (_, mbExpr) <- doIntegral
           case mbExpr of
