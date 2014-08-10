@@ -1,11 +1,16 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 import Sesyrel.FaultTree
 import Sesyrel.Distribution
 import Sesyrel.Expression (evalExpr, mapExprType, texifyDoubleE)
 
-import Control.Monad.Writer.Strict
+import Control.Monad.Writer
 
 import Prelude hiding (Rational)
 import System.IO (withFile, hFlush, hPutStrLn, IOMode(..))
+
+import qualified Data.Text.Lazy.Builder as TB
+import qualified Data.Text.Lazy.IO as T
 
 import qualified Data.IntMap as IM (singleton)
 
@@ -19,26 +24,24 @@ main = do
               Just vs -> factorsSimpleProcess name (Right vs) factors
             texifyPoint p v =
               tell
-              ["\\\\  $ F(" ++ texifyDoubleE 3 p ++ ") = " ++ texifyDoubleE 3 v ++ " $"]
+              ("\\\\  $ F(" <> texifyDoubleE 3 p <> ") = " <> texifyDoubleE 3 v <> " $\n")
         in do
           (_, mbExpr) <- doIntegral
           case mbExpr of
             Nothing -> return ()
             Just expr -> do
               let expr' = mapExprType fromRational expr
-              tell ["Evaluation of some points in distribution:"]
+              tell "Evaluation of some points in distribution:\n"
               forM_ points $ \p ->
                 texifyPoint p (evalExpr expr' (IM.singleton 0 p))
-              tell [""]
-  withFile "output.tex" WriteMode $ \h -> do
-    let putLine l = hPutStrLn h l >> hFlush h
-    mapM_ putLine . execWriter . mapM_ doIt $ trees
+              tell "\n"
+  T.writeFile "output.tex" . TB.toLazyText . execWriter . mapM_ doIt $ trees
 
 trees :: [(String, Maybe [Int], FaultTreeM [Int], [Double])]
 trees =
-  [ ("ftree1", Nothing, simpleFaultTreeM, [1, 3])
-  , ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM, [])
-  -- ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
+  [-- ("ftree1", Nothing, simpleFaultTreeM, [1, 3])
+  --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM, [])
+  ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
   -- ("more electrical", Nothing, medianHydrosystemsM True >>= medianActuationsM True, [5e-6])
   -- ("electrical", Nothing, electroHydrosystemsM True False >>= electroActuationsM False, [5e-6])
   ]

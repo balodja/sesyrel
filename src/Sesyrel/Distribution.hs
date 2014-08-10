@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, OverloadedStrings #-}
 
 module Sesyrel.Distribution (
     calcMttf
@@ -19,6 +19,7 @@ import Sesyrel.Expression
 import Sesyrel.Elimination
 
 import Control.Monad.Writer
+import qualified Data.Text.Lazy.Builder as TB
 
 import Prelude hiding (product, Rational)
 import Data.List (intercalate, intersperse, nub, sort, union, partition, delete, (\\))
@@ -94,44 +95,45 @@ distributionSwitch x s a b =
       a3 = Atom 1 (makeSingle x a) (makeSingle a s) emptyBundle IM.empty
   in fromList [Term a1 [], Term a2 [], Term a3 []]
 
-factorsTell :: MonadWriter [String] m => [Factor] -> m ()
+factorsTell :: MonadWriter TB.Builder m => [Factor] -> m ()
 factorsTell factors = do
-  tell ["\\subsection{Factors}", ""]
-  let fellers = map (\(expr, _) -> tell ["$ " ++ texify expr ++ " $"]) factors
-  sequence_ (intersperse (tell [","]) fellers)
+  tell "\\subsection{Factors}\n\n"
+  let fellers = map (\(expr, _) -> tell ("$ " <> texify' expr <> " $\n")) factors
+  sequence_ (intersperse (tell ",\n") fellers)
+  tell "\n"
 
-factorsSimpleProcess :: MonadWriter [String] m => String -> Either [Int] [Int] -> [Factor] -> m ([Factor], Maybe (Expr Rational))
+factorsSimpleProcess :: MonadWriter TB.Builder m => String -> Either [Int] [Int] -> [Factor] -> m ([Factor], Maybe (Expr Rational))
 factorsSimpleProcess name vv joint = do
-  tell ["\\section{" ++ name ++ "}", ""]
+  tell $ "\\section{" <> TB.fromString name <> "}\n\n"
   marginal <- either
               (\vs -> factorsMarginalize vs joint)
               (\vs -> factorsEliminate vs False joint) vv
-  tell ["\\subsection{More elimination?}", ""]
+  tell "\\subsection{More elimination?}\n\n"
   constant <- factorsMarginalize [] marginal
   let p = deepExpand . foldl1 product .  map fst $ constant
-  tell ["\\subsection{Results}", ""]
-  tell ["$ F(\\infty) = " ++ texify p ++ " $"]
+  tell "\\subsection{Results}\n\n"
+  tell $ "$ F(\\infty) = " <> texify' p <> " $\n"
   distr <- case vv of
     Left [lastVar] -> do
       let marginalized = deepExpand . foldl1 product . map fst $ marginal
           mttf = fromRational $ calcMttf lastVar marginalized
           distr = calcDistribution lastVar marginalized
-      tell [", $ F(x_{" ++ show lastVar ++ "}) = " ++ texify distr ++ "$ , $ MTTF = " ++ texifyDoubleE 3 mttf ++ " $"]
+      tell $ ", $ F(x_{" <> texify' lastVar <> "}) = " <> texify' distr <> "$ , $ MTTF = " <> texifyDoubleE 3 mttf <> " $\n"
       return (Just distr)
     _ -> return Nothing
-  tell [""]
+  tell "\n"
   return (marginal, distr)
 
-factorsEliminate :: MonadWriter [String] m => [Int] -> Bool -> [Factor] -> m [Factor]
+factorsEliminate :: MonadWriter TB.Builder m => [Int] -> Bool -> [Factor] -> m [Factor]
 factorsEliminate elims algo factors =
   do
     let order = if algo then findOrdering Nothing elims (map snd factors) else elims
-    tell ["Elimination order: " ++
-          intercalate ", " (map show order), ""]
+    tell $ "Elimination order: " <>
+      mconcat (intersperse ", " (map texify' order)) <> "\n\n"
     let cliques = pretend order (map snd factors)
-    tell ["Clique history: "]
-    forM_ cliques $ \cs -> tell ["\\\\ $ " ++ intercalate "," (map show cs) ++ " $"]
-    tell [""]
+    tell "Clique history: \n"
+    forM_ cliques $ \cs -> tell ("\\\\ $ " <> mconcat (intersperse "," $ map texify' cs) <> " $\n")
+    tell "\n"
     go factors order
   where
     go fs [] = return fs
@@ -139,21 +141,21 @@ factorsEliminate elims algo factors =
               fs' <- factorsEliminateVariable v fs
               go fs' vs
 
-factorsMarginalize :: MonadWriter [String] m => [Int] -> [Factor] -> m [Factor]
+factorsMarginalize :: MonadWriter TB.Builder m => [Int] -> [Factor] -> m [Factor]
 factorsMarginalize margs factors =
   let vars = nub . sort $ foldl union [] (map snd factors)
   in factorsEliminate (vars \\ margs) True factors
 
-factorsEliminateVariable :: MonadWriter [String] m => Int -> [Factor] -> m [Factor]
+factorsEliminateVariable :: MonadWriter TB.Builder m => Int -> [Factor] -> m [Factor]
 factorsEliminateVariable var factors = do
   factorsTell factors
-  tell ["\\subsection{Integration of $x_{" ++ show var ++ "}$}", ""]
+  tell $ "\\subsection{Integration of $x_{" <> texify' var <> "}$}\n\n"
   let (varFactors, restFactors) = partition (elem var . snd) factors
       expr = ExprN (Term (Atom 1 emptyBundle emptyBundle emptyBundle IM.empty) (map fst varFactors))
-  tell ["$ " ++ "\\int\\limits_0^{+\\infty} "
-        ++ texify expr ++ "\\textrm{dx}_{" ++ show var
-        ++ "} = \\ldots $", ""]
-  newExpr <- integrateM expr var (Constant 0) (Constant plusInfinity)
+  tell $ "$ " <> "\\int\\limits_0^{+\\infty} "
+    <> texify' expr <> "\\textrm{dx}_{" <> texify' var
+    <> "} = \\ldots $\n\n"
+  let newExpr = fst . runWriter $ integrateM expr var (Constant 0) (Constant plusInfinity)
   let newVars = delete var . foldl union [] . map snd $ varFactors
-  tell ["", "\\paragraph{Integration result}", "$ \\ldots = " ++ texify newExpr ++ " $", ""]
+  tell $ "\\paragraph{Integration result}\n" <> "$ \\ldots = " <> texify' newExpr <> " $\n\n"
   return $ (newExpr, newVars) : restFactors
