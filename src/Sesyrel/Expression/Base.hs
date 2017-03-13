@@ -31,8 +31,8 @@ import qualified Prelude as Prelude (product)
 import Data.Set (Set)
 import qualified Data.Set as S
   (map, empty, null, union, delete, insert, fromList, toList)
-import Data.SignedMultiset (SignedMultiset)
-import qualified Data.SignedMultiset as MS
+import Data.MultiSet (MultiSet)
+import qualified Data.MultiSet as MS
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM
   (empty, delete, insert, findWithDefault, unionWith, lookup, toList, map)
@@ -207,14 +207,15 @@ cancelUsAtom (Atom k1 deltas units inds expnt) =
   let (k2, units') = cancelUnits units
       (k3, inds') = cancelIndicators inds
       atom = Atom (k1 * k2 * k3) deltas (UnitBundle unitsGood) inds' expnt
-      (unitsGood, unitsBad) = MS.split 1 (getUnitBundle units')
+      unitsGood = MS.fromOccurList . filter ((<= 1) . snd) . MS.toOccurList $ getUnitBundle units'
+      unitsBad = filter ((> 1) . snd) . MS.toOccurList $ getUnitBundle units'
       makeGood (u, n) = [ Atom 1 emptyBundle (singletonBundle u)
                           emptyBundle IM.empty
                         , Atom (1/(2^n) - 1/2) emptyBundle emptyBundle
                           (singletonBundle u) IM.empty
                         ]
       one = Atom 1 emptyBundle emptyBundle emptyBundle IM.empty
-  in map (foldl productAtom atom) . sequence . ([one] :) . map makeGood . MS.toList $ unitsBad
+  in map (foldl productAtom atom) . sequence . ([one] :) . map makeGood $ unitsBad
 
 unifyAtom :: (Fractional a, Ord a, RealInfinite a) => Atom a -> Atom a
 unifyAtom = unifyByIndicatorAtom . unifyByDeltaAtom
@@ -305,19 +306,19 @@ normalizeSymmetric (DiffSym c@(Constant _) i@(Variable _))
       = DiffSym i c
 normalizeSymmetric d = d
 
-newtype UnitBundle a = UnitBundle {getUnitBundle :: SignedMultiset (DiffSym a)}
+newtype UnitBundle a = UnitBundle {getUnitBundle :: MultiSet (DiffSym a)}
                      deriving (Show, Read, Eq, Ord)
 
 instance Substitutable UnitBundle where
-  substitute v sym (UnitBundle us) = UnitBundle $ MS.additiveMap (substitute v sym) us
+  substitute v sym (UnitBundle us) = UnitBundle $ MS.map (substitute v sym) us
 
 instance Bundle UnitBundle where
   emptyBundle = UnitBundle MS.empty
   nullBundle (UnitBundle us) = MS.null us
   mapBundle f (UnitBundle ds) = UnitBundle $ MS.map (mapDiffSymType f) ds
-  unionBundle (UnitBundle a) (UnitBundle b) = UnitBundle $ MS.additiveUnion a b
-  toListBundle (UnitBundle us) = fst . MS.toLists $ us
-  fromListBundle us = UnitBundle $ MS.fromLists us []
+  unionBundle (UnitBundle a) (UnitBundle b) = UnitBundle $ MS.union a b
+  toListBundle (UnitBundle us) = MS.toList $ us
+  fromListBundle us = UnitBundle $ MS.fromList us
   insertDiff u (UnitBundle us) = UnitBundle $ MS.insert u us
   deleteDiff u (UnitBundle us) = UnitBundle $ MS.delete u us
   findDiff var =

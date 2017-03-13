@@ -11,7 +11,7 @@ import Data.Ratio
 
 import Data.Maybe (fromJust, catMaybes)
 import Data.List (intersperse, elemIndex)
-import qualified Data.SignedMultiset as SM (toList)
+import qualified Data.MultiSet as MS (toOccurList)
 import Data.IntMap.Strict (IntMap)
 import qualified Data.IntMap.Strict as IM (map, toList)
 import qualified Data.Foldable as F (all)
@@ -94,7 +94,7 @@ texifyAtom (Atom k deltas units inds expnt)
     (,) sign $
     (if absK == 1 then mempty else texify' absK)
       <> (mconcat . intersperse " " . map texifyDelta . toListBundle $ deltas)
-      <> (mconcat . intersperse " " . map texifyUnit . SM.toList . getUnitBundle $ units)
+      <> (mconcat . intersperse " " . map texifyUnit . MS.toOccurList . getUnitBundle $ units)
       <> (mconcat . intersperse " " . map texifyIndicator . toListBundle $ inds)
       <> texifyExponent (IM.map negate expnt)
         where
