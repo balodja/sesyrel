@@ -26,13 +26,13 @@ escapeClique v cliques =
 findOrdering :: Maybe Algorithm -> [Int] -> [[Int]] -> [Int]
 findOrdering Nothing = findOrdering (Just MinCardinality)
 findOrdering (Just GraphMinFill) = findGraphOrdering costFunctionMinFill
-findOrdering (Just GraphMinNeighbors) = findGraphOrdering costFunctionMinFill
+findOrdering (Just GraphMinNeighbors) = findGraphOrdering costFunctionMinNeighbors
 findOrdering (Just MinCardinality) = findMinCardinalityOrdering
 
 findMinCardinalityOrdering :: [Int] -> [[Int]] -> [Int]
 findMinCardinalityOrdering [] _ = []
 findMinCardinalityOrdering vs cliques =
-  let costs = map (\v -> length . fst $ escapeClique v cliques) vs
+  let costs = map (\v' -> length . fst $ escapeClique v' cliques) vs
       v = (vs !!) . fromJust $ elemIndex (minimum costs) costs
       (c, rest) = escapeClique v cliques
   in v : findMinCardinalityOrdering (delete v vs) (c : rest)

@@ -17,7 +17,6 @@ import Sesyrel.Expression.Ratio (RealInfinite(..))
 
 import qualified Data.IntMap.Strict as IM (empty, lookup)
 
-import qualified Data.Text.Lazy as T
 import qualified Data.Text.Lazy.Builder as TB
 
 type Limit a = Symbol a

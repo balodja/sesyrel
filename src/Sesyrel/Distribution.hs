@@ -22,7 +22,7 @@ import Control.Monad.Writer
 import qualified Data.Text.Lazy.Builder as TB
 
 import Prelude hiding (product, Rational)
-import Data.List (intercalate, intersperse, nub, sort, union, partition, delete, (\\))
+import Data.List (intersperse, nub, sort, union, partition, delete, (\\))
 
 import qualified Data.IntMap.Strict as IM (delete, lookup, singleton, empty)
 import Data.Maybe (fromMaybe)
@@ -44,7 +44,7 @@ calcMttf var = sum . map mapTerm . toList
 calcDistribution :: (Ord a, Fractional a, Texifiable a, RealInfinite a) => Int -> Expr a -> Expr a
 calcDistribution v e = substitute (-1) (Variable v) $ integrate e v (Constant 0) (Variable (-1))
 
-distributionLambda :: Num a => Int -> a -> Expr a
+distributionLambda :: Int -> a -> Expr a
 distributionLambda variable lambda =
   let expnt = IM.singleton variable lambda
   in ExprN $ Term (Atom lambda emptyBundle emptyBundle emptyBundle expnt) []

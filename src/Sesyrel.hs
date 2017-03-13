@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 
 import Sesyrel.FaultTree
 import Sesyrel.Distribution
@@ -7,7 +7,6 @@ import Sesyrel.Expression (evalExpr, mapExprType, texifyDoubleE)
 import Control.Monad.Writer
 
 import Prelude hiding (Rational)
-import System.IO (withFile, hFlush, hPutStrLn, IOMode(..))
 
 import qualified Data.Text.Lazy.Builder as TB
 import qualified Data.Text.Lazy.IO as T
@@ -52,8 +51,8 @@ testTreeM = do
   b <- lambdaM 5.0
   c <- orM b b
   d <- orM b c
-  e <- andM a c
-  f <- andM c d
+  _ <- andM a c
+  _ <- andM c d
   return []
 
 simpleFaultTreeM :: FaultTreeM [Int]
@@ -193,7 +192,7 @@ electroHydrosystemsM withAccum doValves = do
   [valve1, valve2] <- replicateM 2 (lambdaM 5.8)
   
   electroSysL <- orM engineL electroGrpL
-  electroSysR <- orM engineL electroGrpR
+  electroSysR <- orM engineR electroGrpR
   electroSys <- andM electroSysL electroSysR
 
   let swM v a b = if doValves then switchM v a b else orM v b >>= andM a

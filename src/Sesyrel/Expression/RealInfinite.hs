@@ -2,7 +2,6 @@ module Sesyrel.Expression.RealInfinite (
   RealInfinite (..)
   ) where
 
-import Data.Ratio
 import GHC.Real (Ratio((:%)))
 
 class Num a => RealInfinite a where

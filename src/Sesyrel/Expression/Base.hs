@@ -126,10 +126,10 @@ fromList (t : []) = ExprN t
 fromList (t : ts) = ExprC t (fromList ts)
 fromList [] = ExprN (Term (Atom 0 emptyBundle emptyBundle emptyBundle IM.empty) [])
 
-mapExpr :: (Num a, Num b) => (Term a -> Term b) -> Expr a -> Expr b
+mapExpr :: Num b => (Term a -> Term b) -> Expr a -> Expr b
 mapExpr f = fromList . map f . toList
 
-mapExprType :: (Num a, Ord a, Num b, Ord b) => (a -> b) -> Expr a -> Expr b
+mapExprType :: (Ord a, Num b, Ord b) => (a -> b) -> Expr a -> Expr b
 mapExprType f = mapExprType'
   where
     mapExprType' = mapExpr mapTermType
@@ -158,7 +158,7 @@ normalizeDs = mapExpr normalizeDsTerm
 normalizeDsTerm :: (Num a, Ord a) => Term a -> Term a
 normalizeDsTerm (Term a es) = Term (normalizeDsAtom a) (normalizeDs <$> es)
 
-normalizeDsAtom :: (Num a, Ord a) => Atom a -> Atom a
+normalizeDsAtom :: Ord a => Atom a -> Atom a
 normalizeDsAtom (Atom k ds us is e) = Atom k (DeltaBundle (S.map normalizeSymmetric (getDeltaBundle ds))) us is e
 
 normalizeUs :: (Num a, Ord a) => Expr a -> Expr a
@@ -189,7 +189,7 @@ expandTerm (Term a []) = ExprN $ Term a []
 expandTerm (Term a es) =
   fromList . map (foldl productTerm (Term a [])) . sequence $ toList <$> es
 
-product :: (Fractional a, Ord a) => Expr a -> Expr a -> Expr a
+product :: Fractional a => Expr a -> Expr a -> Expr a
 product e1 e2 = ExprN (Term (Atom 1 emptyBundle emptyBundle emptyBundle IM.empty) [e1, e2])
 
 productTerm :: (Fractional a, Ord a) => Term a -> Term a -> Term a
@@ -202,7 +202,7 @@ productAtom (Atom k1 d1 u1 i1 e1) (Atom k2 d2 u2 i2 e2) =
 makeSingle :: (Ord a, Bundle b) => Int -> Int -> b a
 makeSingle a b = singletonBundle (DiffSym (Variable a) (Variable b))
 
-cancelUsAtom :: (Fractional a, Ord a, RealInfinite a) => Atom a -> [Atom a]
+cancelUsAtom :: (Fractional a, Ord a) => Atom a -> [Atom a]
 cancelUsAtom (Atom k1 deltas units inds expnt) =
   let (k2, units') = cancelUnits units
       (k3, inds') = cancelIndicators inds
@@ -275,7 +275,7 @@ class Bundle e where
   fromListBundle :: Ord a => [DiffSym a] -> e a
   insertDiff :: Ord a => DiffSym a -> e a -> e a
   deleteDiff :: Ord a => DiffSym a -> e a -> e a
-  findDiff :: (Ord a, Eq a) => Int -> e a -> Maybe (DiffSym a)
+  findDiff :: Ord a => Int -> e a -> Maybe (DiffSym a)
 
 singletonBundle :: (Ord a, Bundle b) => DiffSym a -> b a
 singletonBundle d = insertDiff d emptyBundle
