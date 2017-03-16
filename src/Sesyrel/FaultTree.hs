@@ -2,10 +2,8 @@
 
 module Sesyrel.FaultTree (
     FaultTree(..)
-  , FaultTreeM
-  , evalFaultTreeM
-  , newVariableM
-  , addFactorM
+  , FaultTreeMonad
+  , evalFaultTreeMonad
   , lambdaM
   , andM, orM
   , priorityAndOrM
@@ -19,73 +17,51 @@ import Prelude hiding (Rational)
 
 import Control.Monad.RWS
 
-type FaultTreeM = RWS Int [String] FaultTree
+import Data.IntMap (IntMap)
+import qualified Data.IntMap as IM
 
-data FaultTree = FaultTree {
-    faultTreeVariables :: Int
-  , faultTreeFactors :: [Factor]
-  } deriving (Show, Eq)
+type FaultTreeMonad k = RWS Int () (FaultTree k)
 
-evalFaultTreeM :: FaultTreeM a -> (a, FaultTree)
-evalFaultTreeM a = (\(x, s, _) -> (x, s)) $
-                   runRWS fullAction undefined (FaultTree 0 [])
+
+newtype FaultTree k = FaultTree { unFaultTree :: IntMap (FaultTreeNode k) }
+                  deriving (Show, Eq)
+
+data FaultTreeNode k = FaultTreeLambda k
+                     | FaultTreeAnd Int Int
+                     | FaultTreeOr Int Int
+                     | FaultTreePriorityAndOr Int Int Int
+                     | FaultTreeSwitch Int Int Int
+                     deriving (Show, Eq)
+
+evalFaultTreeMonad :: FaultTreeMonad k a -> (a, FaultTree k)
+evalFaultTreeMonad a = (\(x, s, _) -> (x, s)) $
+                       runRWS fullAction undefined (FaultTree IM.empty)
   where
     fullAction = mdo
       x <- local (const n) a
-      n <- gets faultTreeVariables
+      n <- gets $ IM.size . unFaultTree
       return x
 
-newVariableM :: FaultTreeM Int
-newVariableM = do
+lambdaM :: k -> FaultTreeMonad k Int
+lambdaM = addNodeM . FaultTreeLambda
+
+andM, orM :: Int -> Int -> FaultTreeMonad k Int
+andM a b = addNodeM $ FaultTreeAnd a b
+orM a b = addNodeM $ FaultTreeOr a b
+
+priorityAndOrM, switchM :: Int -> Int -> Int -> FaultTreeMonad k Int
+priorityAndOrM a b c = addNodeM $ FaultTreePriorityAndOr a b c
+switchM s a b = addNodeM $ FaultTreeSwitch s a b
+
+nextVariableM :: FaultTreeMonad k Int
+nextVariableM = do
   vars <- ask
-  var <- gets faultTreeVariables
-  modify $ \fts -> fts { faultTreeVariables = succ (faultTreeVariables fts) }
+  var <- gets $ IM.size . unFaultTree
   return (vars - var - 1)
 
-addFactorM :: Factor -> FaultTreeM ()
-addFactorM factor = modify $ \fts ->
-  fts { faultTreeFactors = factor : faultTreeFactors fts }
-
-lambdaM :: Rational -> FaultTreeM Int
-lambdaM lambda = do
-  var <- newVariableM
-  let expr = distributionLambda var lambda
-  addFactorM (expr, [var])
+addNodeM :: FaultTreeNode k -> FaultTreeMonad k Int
+addNodeM node = do
+  var <- nextVariableM
+  modify $ \fts ->
+    FaultTree (IM.insert var node $ unFaultTree fts)
   return var
-
-distributionTwoM :: (Int -> Int -> Int -> Expr Rational) ->
-                    Int -> Int -> FaultTreeM Int
-distributionTwoM distr x y = do
-  var <- newVariableM
-  let expr = distr var x y
-  addFactorM (expr, [x, y, var])
-  return var
-
-andM :: Int -> Int -> FaultTreeM Int
-andM = distributionTwoM distributionAnd
-
-priorityAndOrM :: Int -> Int -> Int -> FaultTreeM Int
-priorityAndOrM a b c = do
-  var <- newVariableM
-  let expr = distributionPriorityAndOr var a b c
-  addFactorM (expr, [a, b, c, var])
-  return var
-
-orM :: Int -> Int -> FaultTreeM Int
-orM = distributionTwoM distributionOr
-
-switchM :: Int -> Int -> Int -> FaultTreeM Int
-switchM s a b = do
-  var <- newVariableM
-  let expr = distributionSwitch var s a b
-  addFactorM (expr, [s, a, b, var])
-  return var
-
-{-
-cspM :: Rational -> Int -> FaultTreeM Int
-cspM lambda a = do
-  b <- newVariableM
-  let expr = distributionCspLambda b lambda a
-  addFactorM (expr, [a, b])
-  return b
--}

@@ -17,7 +17,7 @@ import qualified Data.IntMap as IM (singleton)
 main :: IO ()
 main = do
   let doIt (name, mbOrder, ftreeM, points) =
-        let (vars, FaultTree _ factors) = evalFaultTreeM ftreeM
+        let (vars, FaultTreeSesyrel _ factors) = evalFaultTreeSesyrelM ftreeM
             doIntegral = case mbOrder of
               Nothing -> factorsSimpleProcess name (Left vars) factors
               Just vs -> factorsSimpleProcess name (Right vs) factors
@@ -36,16 +36,16 @@ main = do
               tell "\n"
   T.writeFile "output.tex" . TB.toLazyText . execWriter . mapM_ doIt $ trees
 
-trees :: [(String, Maybe [Int], FaultTreeM [Int], [Double])]
+trees :: [(String, Maybe [Int], FaultTreeSesyrelM [Int], [Double])]
 trees =
-  [-- ("ftree1", Nothing, simpleFaultTreeM, [1, 3])
-  --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeM, [])
+  [-- ("ftree1", Nothing, simpleFaultTreeSesyrelM, [1, 3])
+  --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeSesyrelM, [])
   ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
   -- ("more electrical", Nothing, medianHydrosystemsM True >>= medianActuationsM True, [5e-6])
   -- ("electrical", Nothing, electroHydrosystemsM True False >>= electroActuationsM False, [5e-6])
   ]
 
-testTreeM :: FaultTreeM [Int]
+testTreeM :: FaultTreeSesyrelM [Int]
 testTreeM = do
   a <- lambdaM 3.0
   b <- lambdaM 5.0
@@ -55,8 +55,8 @@ testTreeM = do
   _ <- andM c d
   return []
 
-simpleFaultTreeM :: FaultTreeM [Int]
-simpleFaultTreeM = do
+simpleFaultTreeSesyrelM :: FaultTreeSesyrelM [Int]
+simpleFaultTreeSesyrelM = do
   a <- lambdaM 15.0
   b <- lambdaM 35.0
   _ <- andM a b
@@ -64,15 +64,15 @@ simpleFaultTreeM = do
   t <- andM a c
   return [t]
 
-escalatorChannelM :: Int -> FaultTreeM Int
+escalatorChannelM :: Int -> FaultTreeSesyrelM Int
 escalatorChannelM hydro = do
   ccu <- lambdaM 50
   steer <- lambdaM 15
   x <- orM ccu hydro
   orM x steer
 
-escalatorFaultTree1 :: FaultTreeM [Int]
-escalatorFaultTree1 = do
+escalatorFaultTreeSesyrel1 :: FaultTreeSesyrelM [Int]
+escalatorFaultTreeSesyrel1 = do
   let escalatorSectionM h1 h2 = do
         c1 <- escalatorChannelM h1
         c2 <- escalatorChannelM h2
@@ -87,8 +87,8 @@ escalatorFaultTree1 = do
   t <- andM section1 section2
   return [t]
 
-escalatorFaultTree2 :: FaultTreeM [Int]
-escalatorFaultTree2 = do
+escalatorFaultTreeSesyrel2 :: FaultTreeSesyrelM [Int]
+escalatorFaultTreeSesyrel2 = do
   let escalatorSectionM h1 h2 = do
         c1 <- escalatorChannelM h1
         c2 <- escalatorChannelM h2
@@ -103,7 +103,7 @@ escalatorFaultTree2 = do
   t <- andM section1 section2
   return [t]
 
-traditionalHydrosystemsM :: Bool -> FaultTreeM [Int]
+traditionalHydrosystemsM :: Bool -> FaultTreeSesyrelM [Int]
 traditionalHydrosystemsM doValves = do
   [engineL, engineR] <- replicateM 2 (lambdaM 82)
   [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 60)
@@ -130,7 +130,7 @@ traditionalHydrosystemsM doValves = do
   hydro3 <- swM valve3 hydro3Main hydro3Res >>= orM tank3
   return [hydro1, hydro2, hydro3]
 
-traditionalActuationsM :: Bool -> [Int] -> FaultTreeM [Int]
+traditionalActuationsM :: Bool -> [Int] -> FaultTreeSesyrelM [Int]
 traditionalActuationsM doValves [hydro1, hydro2, hydro3] = do
   [ccu1, ccu2, ccu3, ccu4] <- replicateM 4 (lambdaM 22)
   [steer1, steer2, steer3, steer4] <- replicateM 4 (lambdaM 40)
@@ -145,7 +145,7 @@ traditionalActuationsM doValves [hydro1, hydro2, hydro3] = do
   elevator <- andM elevator1 elevator2
   return [elevator]
 
-medianHydrosystemsM :: Bool -> FaultTreeM [Int]
+medianHydrosystemsM :: Bool -> FaultTreeSesyrelM [Int]
 medianHydrosystemsM doValves = do
   [engineL, engineR] <- replicateM 2 (lambdaM 82)
   [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 60)
@@ -168,7 +168,7 @@ medianHydrosystemsM doValves = do
   hydro2 <- swM valve2 hydro2Main hydro2Res >>= orM tank2
   return [hydro1, hydro2, electroSys]
 
-medianActuationsM :: Bool -> [Int] -> FaultTreeM [Int]
+medianActuationsM :: Bool -> [Int] -> FaultTreeSesyrelM [Int]
 medianActuationsM doValves [hydro1, hydro2, electroSys] = do
   [ccu1, ccu2, ccuE1, ccuE2] <- replicateM 4 (lambdaM 22)
   [steer1, steer2] <- replicateM 2 (lambdaM 40)
@@ -184,7 +184,7 @@ medianActuationsM doValves [hydro1, hydro2, electroSys] = do
   elevator <- andM elevator1 elevator2
   return [elevator]
 
-electroHydrosystemsM :: Bool -> Bool -> FaultTreeM [Int]
+electroHydrosystemsM :: Bool -> Bool -> FaultTreeSesyrelM [Int]
 electroHydrosystemsM withAccum doValves = do
   [engineL, engineR] <- replicateM 2 (lambdaM 82)
   [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 60)
@@ -208,7 +208,7 @@ electroHydrosystemsM withAccum doValves = do
   
   return [electroSys1, electroSys2]
 
-electroActuationsM :: Bool -> [Int] -> FaultTreeM [Int]
+electroActuationsM :: Bool -> [Int] -> FaultTreeSesyrelM [Int]
 electroActuationsM doValves [esys1, esys2] = do
   [ccu1, ccu2, ccu3, ccu4] <- replicateM 4 (lambdaM 22)
   [steer1, steer2, steer3, steer4] <- replicateM 4 (lambdaM 100)

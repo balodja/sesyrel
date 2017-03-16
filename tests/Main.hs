@@ -81,11 +81,11 @@ instance Arbitrary TreeDef where
       sh <- go v vs (M.toList def)
       return (TreeDef . M.fromList $ sh)
 
-makeFaultTree :: TreeDef -> FaultTree
-makeFaultTree (TreeDef def) = snd . evalFaultTreeM $ treeM
+makeFaultTree :: TreeDef -> FaultTreeSesyrel
+makeFaultTree (TreeDef def) = snd . evalFaultTreeSesyrelM $ treeM
   where
     treeM = foldM addToTree M.empty (M.toList def)
-    addToTree :: Map Char Int -> (Char, DistrDef) -> FaultTreeM (Map Char Int)
+    addToTree :: Map Char Int -> (Char, DistrDef) -> FaultTreeSesyrelM (Map Char Int)
     addToTree assoc (c, DistrLambda l) = lambdaM (fromInteger l) >>= \i -> return $ M.insert c i assoc
     addToTree assoc (c, DistrAnd v1 v2) = andM (assoc M.! v1) (assoc M.! v2) >>= \i -> return $ M.insert c i assoc
     addToTree assoc (c, DistrOr v1 v2) = orM (assoc M.! v1) (assoc M.! v2) >>= \i -> return $ M.insert c i assoc
@@ -101,7 +101,7 @@ checkFactors factors xs opt = (== exprOne) . deepExpand . foldl product exprOne
 prop_completeness :: Bool -> TreeDef -> Bool
 prop_completeness full def = all checkTree orders
   where
-    FaultTree num factors = makeFaultTree def
+    FaultTreeSesyrel num factors = makeFaultTree def
     checkTree xs = checkFactors factors xs (not full)
     orders = if full then permutations [0 .. num - 1] else [[0 .. num - 1]]
 
