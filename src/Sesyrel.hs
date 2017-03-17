@@ -17,7 +17,8 @@ import qualified Data.IntMap as IM (singleton)
 main :: IO ()
 main = do
   let doIt (name, mbOrder, ftreeM, points) =
-        let (vars, FaultTreeSesyrel _ factors) = evalFaultTreeSesyrelM ftreeM
+        let (vars, ftree) = evalFaultTreeMonad ftreeM
+            factors = compileDynamicFaultTree ftree
             doIntegral = case mbOrder of
               Nothing -> factorsSimpleProcess name (Left vars) factors
               Just vs -> factorsSimpleProcess name (Right vs) factors
@@ -36,16 +37,16 @@ main = do
               tell "\n"
   T.writeFile "output.tex" . TB.toLazyText . execWriter . mapM_ doIt $ trees
 
-trees :: [(String, Maybe [Int], FaultTreeSesyrelM [Int], [Double])]
+trees :: Fractional k => [(String, Maybe [Int], FaultTreeMonad k [Int], [Double])]
 trees =
-  [-- ("ftree1", Nothing, simpleFaultTreeSesyrelM, [1, 3])
-  --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeSesyrelM, [])
+  [-- ("ftree1", Nothing, simpleFaultTreeMonad, [1, 3])
+  --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeMonad, [])
   ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
   -- ("more electrical", Nothing, medianHydrosystemsM True >>= medianActuationsM True, [5e-6])
   -- ("electrical", Nothing, electroHydrosystemsM True False >>= electroActuationsM False, [5e-6])
   ]
 
-testTreeM :: FaultTreeSesyrelM [Int]
+testTreeM :: Fractional k => FaultTreeMonad k [Int]
 testTreeM = do
   a <- lambdaM 3.0
   b <- lambdaM 5.0
@@ -55,8 +56,8 @@ testTreeM = do
   _ <- andM c d
   return []
 
-simpleFaultTreeSesyrelM :: FaultTreeSesyrelM [Int]
-simpleFaultTreeSesyrelM = do
+simpleFaultTreeMonad :: Fractional k => FaultTreeMonad k [Int]
+simpleFaultTreeMonad = do
   a <- lambdaM 15.0
   b <- lambdaM 35.0
   _ <- andM a b
@@ -64,14 +65,14 @@ simpleFaultTreeSesyrelM = do
   t <- andM a c
   return [t]
 
-escalatorChannelM :: Int -> FaultTreeSesyrelM Int
+escalatorChannelM :: Fractional k => Int -> FaultTreeMonad k Int
 escalatorChannelM hydro = do
   ccu <- lambdaM 50
   steer <- lambdaM 15
   x <- orM ccu hydro
   orM x steer
 
-escalatorFaultTreeSesyrel1 :: FaultTreeSesyrelM [Int]
+escalatorFaultTreeSesyrel1 :: Fractional k => FaultTreeMonad k [Int]
 escalatorFaultTreeSesyrel1 = do
   let escalatorSectionM h1 h2 = do
         c1 <- escalatorChannelM h1
@@ -87,7 +88,7 @@ escalatorFaultTreeSesyrel1 = do
   t <- andM section1 section2
   return [t]
 
-escalatorFaultTreeSesyrel2 :: FaultTreeSesyrelM [Int]
+escalatorFaultTreeSesyrel2 :: Fractional k => FaultTreeMonad k [Int]
 escalatorFaultTreeSesyrel2 = do
   let escalatorSectionM h1 h2 = do
         c1 <- escalatorChannelM h1
@@ -103,7 +104,7 @@ escalatorFaultTreeSesyrel2 = do
   t <- andM section1 section2
   return [t]
 
-traditionalHydrosystemsM :: Bool -> FaultTreeSesyrelM [Int]
+traditionalHydrosystemsM :: Fractional k => Bool -> FaultTreeMonad k [Int]
 traditionalHydrosystemsM doValves = do
   [engineL, engineR] <- replicateM 2 (lambdaM 82)
   [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 60)
@@ -130,7 +131,7 @@ traditionalHydrosystemsM doValves = do
   hydro3 <- swM valve3 hydro3Main hydro3Res >>= orM tank3
   return [hydro1, hydro2, hydro3]
 
-traditionalActuationsM :: Bool -> [Int] -> FaultTreeSesyrelM [Int]
+traditionalActuationsM :: Fractional k => Bool -> [Int] -> FaultTreeMonad k [Int]
 traditionalActuationsM doValves [hydro1, hydro2, hydro3] = do
   [ccu1, ccu2, ccu3, ccu4] <- replicateM 4 (lambdaM 22)
   [steer1, steer2, steer3, steer4] <- replicateM 4 (lambdaM 40)
@@ -145,7 +146,7 @@ traditionalActuationsM doValves [hydro1, hydro2, hydro3] = do
   elevator <- andM elevator1 elevator2
   return [elevator]
 
-medianHydrosystemsM :: Bool -> FaultTreeSesyrelM [Int]
+medianHydrosystemsM :: Fractional k => Bool -> FaultTreeMonad k [Int]
 medianHydrosystemsM doValves = do
   [engineL, engineR] <- replicateM 2 (lambdaM 82)
   [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 60)
@@ -168,7 +169,7 @@ medianHydrosystemsM doValves = do
   hydro2 <- swM valve2 hydro2Main hydro2Res >>= orM tank2
   return [hydro1, hydro2, electroSys]
 
-medianActuationsM :: Bool -> [Int] -> FaultTreeSesyrelM [Int]
+medianActuationsM :: Fractional k => Bool -> [Int] -> FaultTreeMonad k [Int]
 medianActuationsM doValves [hydro1, hydro2, electroSys] = do
   [ccu1, ccu2, ccuE1, ccuE2] <- replicateM 4 (lambdaM 22)
   [steer1, steer2] <- replicateM 2 (lambdaM 40)
@@ -184,7 +185,7 @@ medianActuationsM doValves [hydro1, hydro2, electroSys] = do
   elevator <- andM elevator1 elevator2
   return [elevator]
 
-electroHydrosystemsM :: Bool -> Bool -> FaultTreeSesyrelM [Int]
+electroHydrosystemsM :: Fractional k => Bool -> Bool -> FaultTreeMonad k [Int]
 electroHydrosystemsM withAccum doValves = do
   [engineL, engineR] <- replicateM 2 (lambdaM 82)
   [electroGrpL, electroGrpR] <- replicateM 2 (lambdaM 60)
@@ -208,7 +209,7 @@ electroHydrosystemsM withAccum doValves = do
   
   return [electroSys1, electroSys2]
 
-electroActuationsM :: Bool -> [Int] -> FaultTreeSesyrelM [Int]
+electroActuationsM :: Fractional k => Bool -> [Int] -> FaultTreeMonad k [Int]
 electroActuationsM doValves [esys1, esys2] = do
   [ccu1, ccu2, ccu3, ccu4] <- replicateM 4 (lambdaM 22)
   [steer1, steer2, steer3, steer4] <- replicateM 4 (lambdaM 100)
