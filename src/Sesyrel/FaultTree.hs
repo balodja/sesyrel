@@ -45,10 +45,10 @@ compileDynamicFaultTree (FaultTree ft) = map reNode ft
   where
     reNode :: (Int, FaultTreeNode Rational) -> Factor
     reNode (x, FaultTreeLambda k) = (distributionLambda x k, [x])
-    reNode (x, FaultTreeAnd a b) = (distributionAnd a b x, [a, b, x])
-    reNode (x, FaultTreeOr a b) = (distributionOr a b x, [a, b, x])
-    reNode (x, FaultTreePriorityAndOr a b c) = (distributionPriorityAndOr a b c x, [a, b, c, x])
-    reNode (x, FaultTreeSwitch a b c) = (distributionSwitch a b c x, [a, b, c, x])
+    reNode (x, FaultTreeAnd a b) = (distributionAnd x a b, [x, a, b])
+    reNode (x, FaultTreeOr a b) = (distributionOr x a b, [x, a, b])
+    reNode (x, FaultTreePriorityAndOr a b c) = (distributionPriorityAndOr x a b c, [x, a, b, c])
+    reNode (x, FaultTreeSwitch s a b) = (distributionSwitch x s a b, [x, s, a, b])
 
 lambdaM :: k -> FaultTreeMonad k Variable
 lambdaM = addNodeM . FaultTreeLambda
