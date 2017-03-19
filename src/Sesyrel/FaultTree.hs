@@ -18,13 +18,10 @@ import Prelude hiding (Rational)
 
 import Control.Monad.RWS
 
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IM
-
 type FaultTreeMonad k = RWS Int () (FaultTree k)
 type Variable = Int
 
-newtype FaultTree k = FaultTree { unFaultTree :: IntMap (FaultTreeNode k) }
+newtype FaultTree k = FaultTree { unFaultTree :: [(Int, FaultTreeNode k)] }
                   deriving (Show, Eq)
 
 data FaultTreeNode k = FaultTreeLambda k
@@ -36,15 +33,15 @@ data FaultTreeNode k = FaultTreeLambda k
 
 evalFaultTreeMonad :: FaultTreeMonad k a -> (a, FaultTree k)
 evalFaultTreeMonad a = (\(x, s, _) -> (x, s)) $
-                       runRWS fullAction undefined (FaultTree IM.empty)
+                       runRWS fullAction undefined (FaultTree [])
   where
     fullAction = mdo
       x <- local (const n) a
-      n <- gets $ IM.size . unFaultTree
+      n <- gets $ length . unFaultTree
       return x
 
 compileDynamicFaultTree :: FaultTree Rational -> [Factor]
-compileDynamicFaultTree (FaultTree m) = map reNode $ IM.toList m
+compileDynamicFaultTree (FaultTree ft) = map reNode ft
   where
     reNode :: (Int, FaultTreeNode Rational) -> Factor
     reNode (x, FaultTreeLambda k) = (distributionLambda x k, [x])
@@ -67,12 +64,11 @@ switchM s a b = addNodeM $ FaultTreeSwitch s a b
 nextVariableM :: FaultTreeMonad k Variable
 nextVariableM = do
   vars <- ask
-  var <- gets $ IM.size . unFaultTree
+  var <- gets $ length . unFaultTree
   return (vars - var - 1)
 
 addNodeM :: FaultTreeNode k -> FaultTreeMonad k Variable
 addNodeM node = do
   var <- nextVariableM
-  modify $ \fts ->
-    FaultTree (IM.insert var node $ unFaultTree fts)
+  modify $ (FaultTree . ((var, node) :) . unFaultTree)
   return var
