@@ -11,13 +11,20 @@ Executable sesyrel
   Hs-Source-Dirs:	src
   GHC-Options:		-Wall -O2
   -- -prof -fprof-auto -fprof-cafs -rtsopts
-  Build-Depends:	base >= 4, mtl >= 2, text >= 0.11, containers, multiset
+  Build-Depends:	base >= 4, containers, mtl >= 2, multiset, text >= 0.11, vector >= 0.11.0.0
 
 Test-suite sesyrel-test
   Type:			exitcode-stdio-1.0
   Main-is:		Main.hs
   Hs-Source-Dirs:	tests, src
   Build-Depends:
-    base >= 4, mtl >= 2, text >= 0.11, containers, multiset,
-    QuickCheck >= 2, test-framework >= 0.8,
-    test-framework-quickcheck2 >= 0.3
+    QuickCheck >= 2,
+    base >= 4,
+    containers,
+    mtl >= 2,
+    multiset,
+    test-framework >= 0.8,
+    test-framework-quickcheck2 >= 0.3,
+    text >= 0.11,
+    vector >= 0.11.0.0
+  
