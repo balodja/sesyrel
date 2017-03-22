@@ -30,6 +30,24 @@ applyPermutation pmt xs = map (xs !!) pmt
 times :: Factor k -> Factor k -> Factor k
 times = undefined
 
+expandFactor :: Factor k -> V.Vector Int -> Factor k
+expandFactor = undefined
+
+expandArray :: V.Vector k -> [Int] -> V.Vector k
+expandArray = foldl expandArrayBy1
+
+expandArrayBy1 :: V.Vector k -> Int -> V.Vector k
+expandArrayBy1 vec n = V.concat . doubleSlice . goSlice $ vec
+  where
+    sliceN = 2 ^ n :: Int
+    goSlice :: V.Vector k -> [V.Vector k]
+    goSlice v | V.null v = []
+              | otherwise = let (tv, dv) = V.splitAt sliceN v
+                            in tv : goSlice dv
+    doubleSlice :: [V.Vector k] -> [V.Vector k]
+    doubleSlice (v : vs) = v : v : doubleSlice vs
+    doubleSlice [] = []
+
 eliminate :: Int -> Factor k
 eliminate = undefined
 
