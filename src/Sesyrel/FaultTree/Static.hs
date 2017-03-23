@@ -9,16 +9,16 @@ import Data.Function (on)
 import Data.Foldable (foldl')
 
 import Sesyrel.FaultTree.Base
-import Sesyrel.Elimination (findOrdering)
+import Sesyrel.FaultTree.Elimination (findOrdering)
 
 -- The following code is a real shame.
 
 data Factor k = Factor {
-    factorVariables :: [Int]
+    factorVariables :: [Variable]
   , factorData :: V.Vector k
   } deriving (Show, Ord, Eq)
 
-generateFactor :: [Int] -> ([Bool] -> k) -> Factor k
+generateFactor :: [Variable] -> ([Bool] -> k) -> Factor k
 generateFactor vars gen = Factor (sort vars) (V.generate (2 ^ n) gen')
   where
     n = length vars
@@ -51,7 +51,7 @@ times (Factor vs1 a1) (Factor vs2 a2) = Factor vs $ V.zipWith (*) a1' a2'
     calcExpands [] [] _ = []
     calcExpands (_ : _) [] _ = error "calcExpands: something really went wrong"
 
-unionVars :: [Int] -> [Int] -> [Int]
+unionVars :: [Variable] -> [Variable] -> [Variable]
 unionVars (u : us) (v : vs) | u == v = v : unionVars us vs
                             | u < v = u : unionVars us (v : vs)
                             | otherwise = v : unionVars (u : us) vs
@@ -78,7 +78,7 @@ cutInSlices v n | V.null v = []
                 | otherwise = let (tv, dv) = V.splitAt n v
                               in tv : cutInSlices dv n
 
-eliminate :: Num k => Int -> Factor k -> Factor k
+eliminate :: Num k => Variable -> Factor k -> Factor k
 eliminate v f@(Factor vs a) = maybe f eliminate' (elemIndex v vs)
   where
     eliminate' i = Factor (var i) (arr i)
@@ -94,7 +94,7 @@ ind2sub n = take n . go
 compileFaultTreeStatic :: Floating k => FaultTree k -> k -> [Factor k]
 compileFaultTreeStatic ft t = map (uncurry $ compileNode t) $ unFaultTree ft
   where
-    compileNode :: Floating k => k -> Int -> FaultTreeNode k -> Factor k
+    compileNode :: Floating k => k -> Variable -> FaultTreeNode k -> Factor k
     compileNode t x (FaultTreeLambda l) =
       let p = exp (-l * t) in Factor [x] (V.fromList [p, 1 - p])
     compileNode _ x (FaultTreeOr a b) = generateFactor [a, b, x] $
@@ -103,16 +103,16 @@ compileFaultTreeStatic ft t = map (uncurry $ compileNode t) $ unFaultTree ft
                                          \[ba, bb, bx] -> if (ba && bb) == bx then 1.0 else 0.0
     compileNode _ _ _ = error "compileFaultTreeStatic: this FaultTree is not static"
 
-evalFaultTreeStatic :: Floating k => FaultTree k -> Int -> k -> V.Vector k
+evalFaultTreeStatic :: Floating k => FaultTree k -> Variable -> k -> V.Vector k
 evalFaultTreeStatic ftree var t = vec
   where
     factors = compileFaultTreeStatic ftree t
     vars = map factorVariables factors
     varsForElimination = delete var $ foldl' union [] vars
-    order = findOrdering Nothing varsForElimination vars
+    order = findOrdering Nothing varsForElimination $ vars
     Factor _ vec = productFactors $ foldl' eliminateInFactors factors order
 
-eliminateInFactors :: Fractional k => [Factor k] -> Int -> [Factor k]
+eliminateInFactors :: Fractional k => [Factor k] -> Variable -> [Factor k]
 eliminateInFactors factors var = squeezed : untouched
   where
     (touched, untouched) = partition (\ (Factor vars _) -> var `elem` vars) factors

@@ -3,25 +3,26 @@
 module Sesyrel.FaultTree.Base (
     FaultTree(..)
   , FaultTreeMonad
+  , Variable(..)
   , evalFaultTreeMonad
   , FaultTreeNode(..)
+  , Factor(..)
   , lambdaM
   , andM, orM
   , priorityAndOrM
   , switchM
   ) where
 
-import Sesyrel.Distribution
-import Sesyrel.Expression
-
 import Prelude hiding (Rational)
 
 import Control.Monad.RWS
 
 type FaultTreeMonad k = RWS Int () (FaultTree k)
-type Variable = Int
 
-newtype FaultTree k = FaultTree { unFaultTree :: [(Int, FaultTreeNode k)] }
+newtype Variable = Variable { unVariable :: Int }
+                 deriving (Show, Ord, Eq)
+
+newtype FaultTree k = FaultTree { unFaultTree :: [(Variable, FaultTreeNode k)] }
                   deriving (Show, Eq)
 
 data FaultTreeNode k = FaultTreeLambda k
@@ -55,10 +56,17 @@ nextVariableM :: FaultTreeMonad k Variable
 nextVariableM = do
   vars <- ask
   var <- gets $ length . unFaultTree
-  return (vars - var - 1)
+  return $ Variable (vars - var - 1)
 
 addNodeM :: FaultTreeNode k -> FaultTreeMonad k Variable
 addNodeM node = do
   var <- nextVariableM
   modify $ (FaultTree . ((var, node) :) . unFaultTree)
   return var
+
+class Factor f where
+  variables :: f -> [Variable]
+  eliminate :: Variable -> f -> f
+  times :: f -> f -> f
+  one :: f
+
