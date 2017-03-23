@@ -19,7 +19,7 @@ data StaticFactor k = StaticFactor {
   } deriving (Show, Ord, Eq)
 
 instance Show k => Texifiable (StaticFactor k) where
-  texify' (StaticFactor vars vector) = "variables " <> sToB vars <> ", data " <> sToB (V.toList vector)
+  texify' (StaticFactor vars vector) = "variables " <> texify' vars <> ", data " <> sToB (V.toList vector)
     where
       sToB :: Show a => a -> TB.Builder
       sToB = TB.fromString . show

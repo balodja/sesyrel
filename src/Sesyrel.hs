@@ -2,14 +2,15 @@
 
 import Sesyrel.FaultTree
 import Sesyrel.FaultTree.Dynamic
+import Sesyrel.FaultTree.Static
 
-import Control.Monad (replicateM)
+import Control.Monad (replicateM, forM_)
 import Control.Monad.Logger
 import System.Log.FastLogger
 
 main :: IO ()
 main = withFastLogger (LogFileNoRotate "output.tex" 1048576) $ \logger ->
-  runLoggingT mainM (\_ _ _ -> logger)
+  runLoggingT (mainD >> mainS) (\_ _ _ -> logger)
 
 processDynamicFaultTree :: MonadLogger m => String -> Maybe [Variable] -> FaultTreeMonad Rational [Variable] -> m [DynamicFactor]
 processDynamicFaultTree name mbOrder ftreeM =
@@ -17,11 +18,24 @@ processDynamicFaultTree name mbOrder ftreeM =
       factors = compileDynamicFaultTree ftree
   in factorsSimpleProcess name (maybe (Left vars) Right mbOrder) factors
 
-mainM :: MonadLogger m => m ()
-mainM =
+processStaticFaultTree :: MonadLogger m => String -> Maybe [Variable] -> FaultTreeMonad Double [Variable] -> [Double] -> m ()
+processStaticFaultTree name mbOrder ftreeM points =
+  let (vars, ftree) = evalFaultTreeMonad ftreeM
+  in forM_ points $ \p ->
+    let factors = compileStaticFaultTree ftree p
+    in factorsSimpleProcess (name ++ " at " ++ show p) (maybe (Left vars) Right mbOrder) factors
+
+mainD :: MonadLogger m => m ()
+mainD =
   let doIt (name, mbOrder, ftreeM, points) = do
         factor : _ <- processDynamicFaultTree name mbOrder ftreeM
         logDynamicFactorInfo factor points
+  in mapM_ doIt trees
+
+mainS :: MonadLogger m => m ()
+mainS =
+  let doIt (name, mbOrder, ftreeM, points) =
+        processStaticFaultTree name mbOrder ftreeM points
   in mapM_ doIt trees
 
 trees :: Fractional k => [(String, Maybe [Variable], FaultTreeMonad k [Variable], [Double])]

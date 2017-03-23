@@ -52,10 +52,10 @@ logDynamicFactorInfo (DynamicFactor [F.Variable var] expr) points = do
         logInfoN ("\\\\  $ F(" <> texifyDoubleE 3 p <> ") = " <> texifyDoubleE 3 v <> " $\n")
   logInfoN "\n\\subsection{Some information}\n\n"
   logInfoN $ "$ F(x_{" <> texify var <> "}) = " <> texify distr <> "$ , $ MTTF = " <> texifyDoubleE 3 mttf <> " $\n"
-  let expr' = mapExprType fromRational expr
+  let distr' = mapExprType fromRational distr
   logInfoN "\nEvaluation of some points in distribution:\n"
   forM_ points $ \p ->
-    texifyPoint p (evalExpr expr' (IM.singleton 0 p))
+    texifyPoint p (evalExpr distr' (IM.singleton var p))
   logInfoN "\n"
 logDynamicFactorInfo _ _ = return ()
 
