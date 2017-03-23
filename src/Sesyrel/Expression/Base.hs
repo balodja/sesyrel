@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, OverloadedStrings #-}
 
 module Sesyrel.Expression.Base (
     Expr(..), Term(..) , Atom(..)
@@ -15,13 +15,16 @@ module Sesyrel.Expression.Base (
   , cancelUsAtom, unifyAtom
   ) where
 
+import Sesyrel.Texify
+import qualified Data.Text.Lazy.Builder as TB (Builder, fromString, singleton)
+
 import Control.Applicative ((<$>))
 import qualified Data.Foldable as F (find)
 import Data.Monoid ((<>))
 
-import Data.List (sortBy)
+import Data.List (sortBy, intersperse)
 import GHC.Exts (build)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Data.Either (partitionEithers)
 import Sesyrel.Expression.Ratio (RealInfinite(..))
 
@@ -374,3 +377,64 @@ cancelIndicators us =
     where
       separate u@(DiffSym x y) | x == y = Left 1
                                | otherwise = Right u
+
+instance (Num a, Ord a, Texifiable a) => Texifiable (Expr a) where
+  texify' expr = let terms = texifyTerm <$> toList expr
+                     signs = fst <$> terms
+                     signStrs = (if head signs == '+' then mempty else TB.singleton '-')
+                                : [ TB.fromString $ ' ' : s : " " | s <- tail signs ]
+                 in mconcat $ zipWith (<>) signStrs (snd <$> terms)
+
+instance Texifiable a => Texifiable (Symbol a) where
+  texify' (Variable i) = "x_{" <> texify' i <> "}"
+  texify' (Constant x) = texify' x
+
+instance Texifiable a => Texifiable (DiffSym a) where
+  texify' (DiffSym x y) = texify' x <> " - " <> texify' y
+
+texifyTerm :: (Num a, Ord a, Texifiable a) => Term a -> (Char, TB.Builder)
+texifyTerm (Term a es) | isOne a && not (null es) = (fst (texifyAtom a), exprs)
+                       | otherwise = (sign, atom <> delimiter <> exprs)
+    where
+      (sign, atom) = texifyAtom a
+      isOne (Atom k ds us is e) = abs k == 1 && nullBundle ds && nullBundle us && nullBundle is && all (== 0) e
+      delimiter = if null es then "" else " \\cdot "
+      exprs = mconcat . intersperse " \\cdot " $ texifyAndParen <$> es
+      texifyAndParen e@(ExprC _ _) = "\\big[ " <> texify' e <> " \\big]"
+      texifyAndParen e@(ExprN _) = texify' e
+
+texifyAtom :: (Num a, Ord a, Texifiable a) => Atom a -> (Char, TB.Builder)
+texifyAtom (Atom k deltas units inds expnt)
+  | nullBundle deltas
+    && nullBundle units
+    && nullBundle inds
+    && all (== 0) expnt = (sign, texify' absK)
+  | otherwise =
+    (,) sign $
+    (if absK == 1 then mempty else texify' absK)
+      <> (mconcat . intersperse " " . map texifyDelta . toListBundle $ deltas)
+      <> (mconcat . intersperse " " . map texifyUnit . MS.toOccurList . getUnitBundle $ units)
+      <> (mconcat . intersperse " " . map texifyIndicator . toListBundle $ inds)
+      <> texifyExponent (IM.map negate expnt)
+        where
+          absK = abs k
+          sign = if signum k == 1 then '+' else '-'
+          texifyDelta d = "\\delta(" <> texify' d <> ")"
+          texifyUnit (u, n) | n == 1 = "\\theta(" <> texify' u <> ")"
+                            | otherwise = "\\theta(" <> texify' u <> ")^{" <> texify' n <> "}"
+          texifyIndicator i = "\\epsilon(" <> texify' i <> ")"
+          texifyExponent e = let vf = texifyVarForm e
+                             in if all (== 0) expnt then mempty else "e^{" <> vf <> "}"
+
+texifyVarForm :: (Num a, Ord a, Texifiable a) => IntMap a -> TB.Builder
+texifyVarForm m | null pairs = mempty
+                | otherwise = makeFirstVar (head pairs) <> mconcat (map makeSecondVar (tail pairs))
+  where
+    makeFirstVar ('+', t) = t
+    makeFirstVar (s, t) = TB.singleton s <> t
+    makeSecondVar (s, t) = TB.singleton s <> t
+    pairs = catMaybes . map texifyVar . IM.toList $ m
+    texifyVar (n, v) | v == 0 = Nothing
+                     | otherwise = Just (sign v, showNum v <> "x_{" <> texify' n <> "}")
+    sign v = if v > 0 then '+' else '-'
+    showNum x = let ax = abs x in if ax == 1 then mempty else texify' ax

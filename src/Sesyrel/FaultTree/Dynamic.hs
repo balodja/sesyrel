@@ -1,18 +1,29 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Sesyrel.FaultTree.Dynamic (
-  compileDynamicFaultTree
+    compileDynamicFaultTree
+  , logDynamicFactorInfo
+  , DynamicFactor(..)
   ) where
 
 import Sesyrel.FaultTree.Base hiding (Variable)
-import qualified Sesyrel.FaultTree.Base as F (Variable)
+import qualified Sesyrel.FaultTree.Base as F (Variable(..))
 import Sesyrel.Expression
+import Sesyrel.Texify
+
+import Control.Monad (forM_)
+import Control.Monad.Logger
+import Data.Monoid ((<>))
 
 import qualified Data.IntMap.Strict as IM (delete, lookup, singleton, empty)
 import Data.Maybe (fromMaybe)
 
-import Data.List (delete)
+import Data.List (delete, sort)
 
 --data DynamicFactor = DynamicFactor (Expr Rational, [F.Variable])
 data DynamicFactor = DynamicFactor [F.Variable] (Expr Rational)
+
+instance Texifiable DynamicFactor where
+  texify' (DynamicFactor _ expr) = "$ " <> texify' expr <> " $ "
 
 instance Factor DynamicFactor where
   variables (DynamicFactor vs _) = vs
@@ -21,8 +32,32 @@ instance Factor DynamicFactor where
    where
     vars' = delete var vars
     expr' = integrate expr (unVariable var) (Constant 0) (Constant plusInfinity)
-  times v1 v2 = undefined
-  one = undefined
+  times (DynamicFactor vs1 expr1) (DynamicFactor vs2 expr2) =
+    DynamicFactor (vs1 `unionVariables` vs2) $ productExpression [expr1, expr2]
+  one = DynamicFactor [] $ productExpression []
+  
+  texifyVariableElimination (F.Variable var) (DynamicFactor _ expr) =
+    "$ " <> "\\int\\limits_0^{+\\infty} "
+    <> texify expr <> "\\textrm{dx}_{" <> texify var
+    <> "}$ "
+
+productExpression :: Num a => [Expr a] -> Expr a
+productExpression es = ExprN (Term (Atom 1 emptyBundle emptyBundle emptyBundle IM.empty) es)
+
+logDynamicFactorInfo :: MonadLogger m => DynamicFactor -> [Double] -> m ()
+logDynamicFactorInfo (DynamicFactor [F.Variable var] expr) points = do
+  let mttf = fromRational $ calcMttf var expr
+      distr = calcDistribution var expr
+      texifyPoint p v =
+        logInfoN ("\\\\  $ F(" <> texifyDoubleE 3 p <> ") = " <> texifyDoubleE 3 v <> " $\n")
+  logInfoN "\n\\subsection{Some information}\n\n"
+  logInfoN $ "$ F(x_{" <> texify var <> "}) = " <> texify distr <> "$ , $ MTTF = " <> texifyDoubleE 3 mttf <> " $\n"
+  let expr' = mapExprType fromRational expr
+  logInfoN "\nEvaluation of some points in distribution:\n"
+  forM_ points $ \p ->
+    texifyPoint p (evalExpr expr' (IM.singleton 0 p))
+  logInfoN "\n"
+logDynamicFactorInfo _ _ = return ()
 
 calcMttf :: (Eq a, Fractional a) => Int -> Expr a -> a
 calcMttf var = sum . map mapTerm . toList
@@ -95,7 +130,7 @@ compileDynamicFaultTree (FaultTree ft) = map reNode ft
     u = unVariable
     reNode :: (F.Variable, FaultTreeNode Rational) -> DynamicFactor
     reNode (x, FaultTreeLambda k) = DynamicFactor [x] $ distributionLambda (u x) k
-    reNode (x, FaultTreeAnd a b) = DynamicFactor [x, a, b] $ distributionAnd (u x) (u a) (u b)
-    reNode (x, FaultTreeOr a b) = DynamicFactor [x, a, b] $ distributionOr (u x) (u a) (u b)
-    reNode (x, FaultTreePriorityAndOr a b c) = DynamicFactor [x, a, b, c] $ distributionPriorityAndOr (u x) (u a) (u b) (u c)
-    reNode (x, FaultTreeSwitch s a b) = DynamicFactor [x, s, a, b] $ distributionSwitch (u x) (u s) (u a) (u b)
+    reNode (x, FaultTreeAnd a b) = DynamicFactor (sort [x, a, b]) $ distributionAnd (u x) (u a) (u b)
+    reNode (x, FaultTreeOr a b) = DynamicFactor (sort [x, a, b]) $ distributionOr (u x) (u a) (u b)
+    reNode (x, FaultTreePriorityAndOr a b c) = DynamicFactor (sort [x, a, b, c]) $ distributionPriorityAndOr (u x) (u a) (u b) (u c)
+    reNode (x, FaultTreeSwitch s a b) = DynamicFactor (sort [x, s, a, b]) $ distributionSwitch (u x) (u s) (u a) (u b)

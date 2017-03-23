@@ -6,7 +6,7 @@ module Sesyrel.Expression.Integration (
   ) where
 
 import Sesyrel.Expression.Base
-import Sesyrel.Expression.Texify
+import Sesyrel.Texify
 
 import Control.Applicative ((<|>))
 import Control.Monad.Logger

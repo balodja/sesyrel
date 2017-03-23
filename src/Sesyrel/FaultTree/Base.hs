@@ -6,21 +6,31 @@ module Sesyrel.FaultTree.Base (
   , Variable(..)
   , evalFaultTreeMonad
   , FaultTreeNode(..)
+  , isDynamic
+  , unionVariables
   , Factor(..)
+  , productFactors
   , lambdaM
   , andM, orM
   , priorityAndOrM
   , switchM
   ) where
 
+import Sesyrel.Texify (Texifiable(..))
+
 import Prelude hiding (Rational)
 
 import Control.Monad.RWS
+import Data.Foldable (foldl')
+import Data.Text (Text)
 
 type FaultTreeMonad k = RWS Int () (FaultTree k)
 
 newtype Variable = Variable { unVariable :: Int }
                  deriving (Show, Ord, Eq)
+
+instance Texifiable Variable where
+  texify' (Variable i) = texify' i
 
 newtype FaultTree k = FaultTree { unFaultTree :: [(Variable, FaultTreeNode k)] }
                   deriving (Show, Eq)
@@ -31,6 +41,15 @@ data FaultTreeNode k = FaultTreeLambda k
                      | FaultTreePriorityAndOr Variable Variable Variable
                      | FaultTreeSwitch Variable Variable Variable
                      deriving (Show, Eq)
+
+isDynamic :: FaultTree k -> Bool
+isDynamic (FaultTree vs) = any isDynamic' $ map snd vs
+  where
+    isDynamic' (FaultTreeLambda _) = False
+    isDynamic' (FaultTreeAnd _ _) = False
+    isDynamic' (FaultTreeOr _ _) = False
+    isDynamic' (FaultTreePriorityAndOr _ _ _) = True
+    isDynamic' (FaultTreeSwitch _ _ _) = True
 
 evalFaultTreeMonad :: FaultTreeMonad k a -> (a, FaultTree k)
 evalFaultTreeMonad a = (\(x, s, _) -> (x, s)) $
@@ -64,9 +83,20 @@ addNodeM node = do
   modify $ (FaultTree . ((var, node) :) . unFaultTree)
   return var
 
-class Factor f where
+unionVariables :: [Variable] -> [Variable] -> [Variable]
+unionVariables (u : us) (v : vs) | u == v = v : unionVariables us vs
+                            | u < v = u : unionVariables us (v : vs)
+                            | otherwise = v : unionVariables (u : us) vs
+unionVariables [] vs = vs
+unionVariables us [] = us
+
+class Texifiable f => Factor f where
   variables :: f -> [Variable]
   eliminate :: Variable -> f -> f
   times :: f -> f -> f
   one :: f
+  texifyVariableElimination :: Variable -> f -> Text
+
+productFactors :: Factor f => [f] -> f
+productFactors fs = foldl' times one fs
 
