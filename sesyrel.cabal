@@ -11,7 +11,15 @@ Executable sesyrel
   Hs-Source-Dirs:	src
   GHC-Options:		-Wall -O2
   -- -prof -fprof-auto -fprof-cafs -rtsopts
-  Build-Depends:	base >= 4, containers, mtl >= 2, multiset, text >= 0.11, vector >= 0.11.0.0
+  Build-Depends:
+    base >= 4,
+    containers,
+    mtl >= 2,
+    multiset,
+    text >= 0.11,
+    vector >= 0.11.0.0,
+    monad-logger,
+    fast-logger
 
 Test-suite sesyrel-test
   Type:			exitcode-stdio-1.0

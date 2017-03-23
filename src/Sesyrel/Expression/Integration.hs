@@ -9,7 +9,8 @@ import Sesyrel.Expression.Base
 import Sesyrel.Expression.Texify
 
 import Control.Applicative ((<|>))
-import Control.Monad.Writer (MonadWriter, runWriter, tell, liftM)
+import Control.Monad.Logger
+import Control.Monad.Identity (runIdentity, liftM)
 import Data.Monoid ((<>))
 
 import Data.Maybe (fromJust, fromMaybe)
@@ -17,29 +18,29 @@ import Sesyrel.Expression.Ratio (RealInfinite(..))
 
 import qualified Data.IntMap.Strict as IM (empty, lookup)
 
-import qualified Data.Text.Lazy.Builder as TB
+--import qualified Data.Text.Lazy.Builder as TB
 
 type Limit a = Symbol a
 
 integrate :: (RealInfinite a, Fractional a, Ord a, Texifiable a) => Expr a -> Int -> Limit a -> Limit a -> Expr a
-integrate expr val lo hi = fst . runWriter $ integrateM expr val lo hi
+integrate expr val lo hi = runIdentity . runNoLoggingT $ integrateM expr val lo hi
 
-integrateM :: (RealInfinite a, Fractional a, Ord a, Texifiable a, MonadWriter TB.Builder m) => Expr a -> Int -> Limit a -> Limit a -> m (Expr a)
+integrateM :: (RealInfinite a, Fractional a, Ord a, Texifiable a, MonadLogger m) => Expr a -> Int -> Limit a -> Limit a -> m (Expr a)
 integrateM expr var lo hi = do
   let filterAtoms = filter (\(Atom k _ _ _ _) -> k /= 0)
       integrateTermM (Term atom _) = do
-        tell "\\paragraph{Atom}\n"
+        logInfoN "\\paragraph{Atom}\n"
         let integrated = integrateAtom atom var lo hi
             simplified = filterAtoms . concatMap (cancelUsAtom . unifyAtom) $ integrated
             exprBefore = ExprN (Term atom [])
             exprDuring = fromList [Term a [] | a <- integrated]
             exprAfter = fromList [Term a [] | a <- simplified]
-        tell ("$\n"
+        logInfoN ("$\n"
              <> "\\int\\limits_0^{+\\infty} "
-             <> texify' exprBefore <> "\\textrm{dx}_{" <> texify' var
+             <> texify exprBefore <> "\\textrm{dx}_{" <> texify var
              <> "}\n"
-             <> "= " <> texify' exprDuring <> "\n"
-             <> "= " <> texify' exprAfter <> "\n"
+             <> "= " <> texify exprDuring <> "\n"
+             <> "= " <> texify exprAfter <> "\n"
              <> "$\n\n")
         return simplified
   atoms' <- liftM concat . mapM integrateTermM . toList . deepExpand $ expr

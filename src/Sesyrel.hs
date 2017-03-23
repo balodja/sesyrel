@@ -4,15 +4,14 @@ import Sesyrel.FaultTree
 import Sesyrel.Distribution
 import Sesyrel.Expression (evalExpr, mapExprType, texifyDoubleE)
 
-import Control.Monad.Writer
+import Control.Monad (forM_, replicateM)
+import Control.Monad.Logger
+import System.Log.FastLogger
+import Data.Monoid ((<>))
 
 import Prelude hiding (Rational)
 
-import qualified Data.Text.Lazy.Builder as TB
-import qualified Data.Text.Lazy.IO as T
-
 import qualified Data.IntMap as IM (singleton)
-
 
 main :: IO ()
 main = do
@@ -23,7 +22,7 @@ main = do
               Nothing -> factorsSimpleProcess name (Left vars) factors
               Just vs -> factorsSimpleProcess name (Right vs) factors
             texifyPoint p v =
-              tell
+              logInfoN
               ("\\\\  $ F(" <> texifyDoubleE 3 p <> ") = " <> texifyDoubleE 3 v <> " $\n")
         in do
           (_, mbExpr) <- doIntegral
@@ -31,17 +30,18 @@ main = do
             Nothing -> return ()
             Just expr -> do
               let expr' = mapExprType fromRational expr
-              tell "Evaluation of some points in distribution:\n"
+              logInfoN "Evaluation of some points in distribution:\n"
               forM_ points $ \p ->
                 texifyPoint p (evalExpr expr' (IM.singleton 0 p))
-              tell "\n"
-  T.writeFile "output.tex" . TB.toLazyText . execWriter . mapM_ doIt $ trees
+              logInfoN "\n"
+  withFastLogger (LogFileNoRotate "output1.tex" 100000) $ \logger -> do
+    runLoggingT (mapM_ doIt trees) (\_ _ _ -> logger)
 
 trees :: Fractional k => [(String, Maybe [Int], FaultTreeMonad k [Int], [Double])]
 trees =
-  [-- ("ftree1", Nothing, simpleFaultTreeMonad, [1, 3])
+  [ ("ftree1", Nothing, simpleFaultTreeMonad, [1, 3])
   --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeMonad, [])
-  ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
+  -- ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
   -- ("more electrical", Nothing, medianHydrosystemsM True >>= medianActuationsM True, [5e-6])
   -- ("electrical", Nothing, electroHydrosystemsM True False >>= electroActuationsM False, [5e-6])
   ]

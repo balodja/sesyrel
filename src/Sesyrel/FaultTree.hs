@@ -5,6 +5,7 @@ module Sesyrel.FaultTree (
   , FaultTreeMonad
   , evalFaultTreeMonad
   , compileDynamicFaultTree
+  , evalFaultTreeStatic
   , lambdaM
   , andM, orM
   , priorityAndOrM
