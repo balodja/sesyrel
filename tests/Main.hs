@@ -16,6 +16,9 @@ import Data.List (delete, permutations)
 import Sesyrel.Expression (isOneExpr)
 import Sesyrel.FaultTree
 import Sesyrel.FaultTree.Dynamic
+import Sesyrel.FaultTree.Static
+
+import qualified Data.Vector as V (length, (!))
 
 import Data.Map (Map)
 import qualified Data.Map as M
@@ -32,11 +35,17 @@ newtype TreeDef = TreeDef (Map Char DistrDef)
                   deriving (Show, Eq)
 -}
 
+data StaticFaultTree = StaticFaultTree Double (FaultTree Double)
+                     deriving Show
+
 newtype DynamicFaultTree = DynamicFaultTree (FaultTree Rational)
                            deriving Show
 
 monadToDyn :: Monad m => FaultTreeMonadT Rational m a -> m DynamicFaultTree
 monadToDyn act = (DynamicFaultTree . snd) <$> (runFaultTreeMonadT act)
+
+monadToStat :: Monad m => FaultTreeMonadT Double m Double -> m StaticFaultTree
+monadToStat act = (uncurry StaticFaultTree) <$> (runFaultTreeMonadT act)
 
 pickBase :: Num k => (Integer, Integer) -> FaultTreeMonadT k Gen Variable
 pickBase range = do
@@ -95,6 +104,17 @@ shrinkFaultTree (FaultTree pairs) =
         trees = [tree | f <- fingers pairs, tree <- substituteFinger f]
     in map FaultTree trees
 
+instance Arbitrary StaticFaultTree where
+  arbitrary = sized $ \n -> monadToStat $ do
+    numBaseVars <- lift $ choose (8, 8 + n `div` 5)
+    baseVars <- replicateM numBaseVars $ pickBase (1, 10)
+    numDepVars <- lift $ choose (12, 12 + n `div` 2)
+    depVars <- replicateM numDepVars $ pickDependent (15, 15, 0)
+    time <- lift $ choose (1, 10 :: Int)
+    return (realToFrac time)
+
+  shrink (StaticFaultTree t tree) = map (StaticFaultTree t) $ shrinkFaultTree tree
+
 instance Arbitrary DynamicFaultTree where
   arbitrary = sized $ \n -> monadToDyn $ do
     numBaseVars <- lift $ choose (4, 4 + n `div` 20)
@@ -106,16 +126,23 @@ instance Arbitrary DynamicFaultTree where
   shrink (DynamicFaultTree tree) = map DynamicFaultTree $ shrinkFaultTree tree
 
 
-prop_completeness :: Bool -> DynamicFaultTree -> Bool
-prop_completeness full (DynamicFaultTree ft) = all checkTree orders
+prop_dynamic_completeness :: Bool -> DynamicFaultTree -> Bool
+prop_dynamic_completeness full (DynamicFaultTree ft) = all checkFactors orders
   where
     factors = compileDynamicFaultTree ft
     variables = faultTreeVariables ft
-    checkFactors fs xs opt = isOneExpr . dynamicFactorExpr . productFactors $ factorsEliminate xs opt fs
-    checkTree xs = checkFactors factors xs (not full)
+    checkFactors xs = isOneExpr . dynamicFactorExpr . productFactors $ factorsEliminate xs (not full) factors
     orders = if full then permutations variables else [variables]
 
-
+prop_static_completeness :: Bool -> StaticFaultTree -> Bool
+prop_static_completeness full (StaticFaultTree time ft) = all checkFactors orders
+  where
+    factors = compileStaticFaultTree ft time
+    variables = faultTreeVariables ft
+    checkFactors xs = checkOne . productFactors $ factorsEliminate xs (not full) factors
+    checkOne (StaticFactor [] vec) = (V.length vec == 1) && ((vec V.! 0 - 1) < 1e-10)
+    checkOne _ = error "prop_static_completeness: this should not happen"
+    orders = if full then permutations variables else [variables]
 
 tree1 :: Num k => FaultTree k
 tree1 = snd . runFaultTreeMonad $ do
@@ -171,23 +198,35 @@ tree6 = snd . runFaultTreeMonad $ do
   t <- orM d e
   return ()
 
-tests_completeness :: Test
-tests_completeness =
+tests_dynamic_completeness :: Test
+tests_dynamic_completeness =
   testGroup "Complete integral over distributions should be equal to one"
-  [ testProperty "large random distributions" (prop_completeness False)
+  [ testProperty "large random distributions" (prop_dynamic_completeness False)
   , testProperty "predefined distribution #1 in all orders"
-    (once $ prop_completeness True $ DynamicFaultTree tree1)
+    (once $ prop_dynamic_completeness True $ DynamicFaultTree tree1)
   , testProperty "predefined distribution #2 in all orders"
-    (once $ prop_completeness True $ DynamicFaultTree tree2)
+    (once $ prop_dynamic_completeness True $ DynamicFaultTree tree2)
   , testProperty "predefined distribution #3 in all orders"
-    (once $ prop_completeness True $ DynamicFaultTree tree3)
+    (once $ prop_dynamic_completeness True $ DynamicFaultTree tree3)
   , testProperty "predefined distribution #4 in all orders"
-    (once $ prop_completeness True $ DynamicFaultTree tree4)
+    (once $ prop_dynamic_completeness True $ DynamicFaultTree tree4)
   , testProperty "predefined distribution #5 in all orders"
-    (once $ prop_completeness True $ DynamicFaultTree tree5)
+    (once $ prop_dynamic_completeness True $ DynamicFaultTree tree5)
   , testProperty "predefined distribution #6 in all orders"
-    (once $ prop_completeness True $ DynamicFaultTree tree6)
+    (once $ prop_dynamic_completeness True $ DynamicFaultTree tree6)
+  ]
+
+tests_static_completeness :: Test
+tests_static_completeness =
+  testGroup "Complete elimination over discrete distributions should be equal to one"
+  [ testProperty "large random distributions" (prop_static_completeness False)
+  , testProperty "predefined distribution #1 in all orders"
+    (once $ prop_static_completeness True $ StaticFaultTree 1.5 tree1)
+  , testProperty "predefined distribution #2 in all orders"
+    (once $ prop_static_completeness True $ StaticFaultTree 1.5 tree2)
+  , testProperty "predefined distribution #3 in all orders"
+    (once $ prop_static_completeness True $ StaticFaultTree 1.5 tree3)
   ]
 
 main :: IO ()
-main = defaultMain [ tests_completeness ]
+main = defaultMain [ tests_static_completeness ]
