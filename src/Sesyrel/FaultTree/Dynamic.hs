@@ -3,6 +3,7 @@ module Sesyrel.FaultTree.Dynamic (
     compileDynamicFaultTree
   , logDynamicFactorInfo
   , DynamicFactor(..)
+  , dynamicFactorExpr
   ) where
 
 import Sesyrel.FaultTree.Base hiding (Variable)
@@ -21,6 +22,9 @@ import Data.List (delete, sort)
 
 --data DynamicFactor = DynamicFactor (Expr Rational, [F.Variable])
 data DynamicFactor = DynamicFactor [F.Variable] (Expr Rational)
+
+dynamicFactorExpr :: DynamicFactor -> Expr Rational
+dynamicFactorExpr (DynamicFactor _ e) = e
 
 instance Texifiable DynamicFactor where
   texify' (DynamicFactor _ expr) = "$ " <> texify' expr <> " $ "

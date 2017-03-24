@@ -14,13 +14,13 @@ main = withFastLogger (LogFileNoRotate "output.tex" 1048576) $ \logger ->
 
 processDynamicFaultTree :: MonadLogger m => String -> Maybe [Variable] -> FaultTreeMonad Rational [Variable] -> m [DynamicFactor]
 processDynamicFaultTree name mbOrder ftreeM =
-  let (vars, ftree) = evalFaultTreeMonad ftreeM
+  let (vars, ftree) = runFaultTreeMonad ftreeM
       factors = compileDynamicFaultTree ftree
   in factorsSimpleProcess name (maybe (Left vars) Right mbOrder) factors
 
 processStaticFaultTree :: MonadLogger m => String -> Maybe [Variable] -> FaultTreeMonad Double [Variable] -> [Double] -> m ()
 processStaticFaultTree name mbOrder ftreeM points =
-  let (vars, ftree) = evalFaultTreeMonad ftreeM
+  let (vars, ftree) = runFaultTreeMonad ftreeM
   in forM_ points $ \p ->
     let factors = compileStaticFaultTree ftree p
     in factorsSimpleProcess (name ++ " at " ++ show p) (maybe (Left vars) Right mbOrder) factors

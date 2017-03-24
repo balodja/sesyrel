@@ -1,16 +1,9 @@
 {-# LANGUAGE OverloadedStrings, Rank2Types #-}
 
 module Sesyrel.FaultTree (
-    FaultTree(..)
-  , FaultTreeMonad
-  , Variable(..)
-  , evalFaultTreeMonad
+    module Sesyrel.FaultTree.Base
   , compileDynamicFaultTree
   , compileStaticFaultTree
-  , lambdaM
-  , andM, orM
-  , priorityAndOrM
-  , switchM
   , factorsLog
   , factorsEliminate
   , factorsEliminateM

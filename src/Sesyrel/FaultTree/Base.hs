@@ -1,15 +1,22 @@
-{-# LANGUAGE RecursiveDo #-}
+{-# LANGUAGE RecursiveDo, GeneralizedNewtypeDeriving #-}
 
 module Sesyrel.FaultTree.Base (
     FaultTree(..)
+  , unFaultTree
+  , FaultTreeMonadT
   , FaultTreeMonad
   , Variable(..)
-  , evalFaultTreeMonad
+  , unVariable
+  , runFaultTreeMonadT
+  , runFaultTreeMonad
   , FaultTreeNode(..)
   , isDynamic
+  , faultTreeVariables
   , unionVariables
   , Factor(..)
   , productFactors
+  , variablesM
+  , addNodeM
   , lambdaM
   , andM, orM
   , priorityAndOrM
@@ -20,20 +27,29 @@ import Sesyrel.Texify (Texifiable(..))
 
 import Prelude hiding (Rational)
 
-import Control.Monad.RWS
+import Control.Monad.State
+import Control.Monad.Identity
 import Data.Foldable (foldl')
 import Data.Text (Text)
 
-type FaultTreeMonad k = RWS Int () (FaultTree k)
+type FaultTreeMonadT k m = StateT (FaultTree k) m
 
-newtype Variable = Variable { unVariable :: Int }
-                 deriving (Show, Ord, Eq)
+type FaultTreeMonad k = FaultTreeMonadT k Identity
+
+newtype Variable = Variable Int
+                 deriving (Show, Ord, Eq, Num, Enum)
+
+unVariable :: Variable -> Int
+unVariable (Variable i) = i
 
 instance Texifiable Variable where
   texify' (Variable i) = texify' i
 
-newtype FaultTree k = FaultTree { unFaultTree :: [(Variable, FaultTreeNode k)] }
+newtype FaultTree k = FaultTree [(Variable, FaultTreeNode k)]
                   deriving (Show, Eq)
+
+unFaultTree :: FaultTree k -> [(Variable, FaultTreeNode k)]
+unFaultTree (FaultTree ps) = ps
 
 data FaultTreeNode k = FaultTreeLambda k
                      | FaultTreeAnd Variable Variable
@@ -51,37 +67,36 @@ isDynamic (FaultTree vs) = any isDynamic' $ map snd vs
     isDynamic' (FaultTreePriorityAndOr _ _ _) = True
     isDynamic' (FaultTreeSwitch _ _ _) = True
 
-evalFaultTreeMonad :: FaultTreeMonad k a -> (a, FaultTree k)
-evalFaultTreeMonad a = (\(x, s, _) -> (x, s)) $
-                       runRWS fullAction undefined (FaultTree [])
-  where
-    fullAction = mdo
-      x <- local (const n) a
-      n <- gets $ length . unFaultTree
-      return x
+runFaultTreeMonad :: FaultTreeMonad k a -> (a, FaultTree k)
+runFaultTreeMonad = runIdentity . runFaultTreeMonadT
 
-lambdaM :: k -> FaultTreeMonad k Variable
+runFaultTreeMonadT :: Monad m => FaultTreeMonadT k m a -> m (a, FaultTree k)
+runFaultTreeMonadT a = (\(x, FaultTree s) -> (x, FaultTree $ reverse s)) <$>
+                       runStateT a (FaultTree [])
+
+lambdaM :: Monad m => k -> FaultTreeMonadT k m Variable
 lambdaM = addNodeM . FaultTreeLambda
 
-andM, orM :: Variable -> Variable -> FaultTreeMonad k Variable
+andM, orM :: Monad m => Variable -> Variable -> FaultTreeMonadT k m Variable
 andM a b = addNodeM $ FaultTreeAnd a b
 orM a b = addNodeM $ FaultTreeOr a b
 
-priorityAndOrM, switchM :: Variable -> Variable -> Variable -> FaultTreeMonad k Variable
+priorityAndOrM, switchM :: Monad m => Variable -> Variable -> Variable -> FaultTreeMonadT k m Variable
 priorityAndOrM a b c = addNodeM $ FaultTreePriorityAndOr a b c
 switchM s a b = addNodeM $ FaultTreeSwitch s a b
 
-nextVariableM :: FaultTreeMonad k Variable
-nextVariableM = do
-  vars <- ask
-  var <- gets $ length . unFaultTree
-  return $ Variable (vars - var - 1)
+addNodeM :: Monad m => FaultTreeNode k -> FaultTreeMonadT k m Variable
+addNodeM node = state $ \(FaultTree nodes) ->
+  let var = Variable $ length nodes
+  in (var, FaultTree $ (var, node) : nodes)
 
-addNodeM :: FaultTreeNode k -> FaultTreeMonad k Variable
-addNodeM node = do
-  var <- nextVariableM
-  modify $ (FaultTree . ((var, node) :) . unFaultTree)
-  return var
+variablesM :: Monad m => FaultTreeMonadT k m [Variable]
+variablesM = do
+  FaultTree nodes <- get
+  return $ [0 .. (fromIntegral $ length nodes - 1)]
+
+faultTreeVariables :: FaultTree k -> [Variable]
+faultTreeVariables (FaultTree ps) = map fst ps
 
 unionVariables :: [Variable] -> [Variable] -> [Variable]
 unionVariables (u : us) (v : vs) | u == v = v : unionVariables us vs
@@ -99,4 +114,3 @@ class Texifiable f => Factor f where
 
 productFactors :: Factor f => [f] -> f
 productFactors fs = foldl' times one fs
-

@@ -5,6 +5,7 @@ module Sesyrel.Expression.Base (
   , Symbol(..), DiffSym(..)
   , toList, fromList
   , mapExprType, evalExpr
+  , isOneExpr
   , normalizeDs, normalizeUs
   , Substitutable(..)
   , Bundle(..), singletonBundle
@@ -155,6 +156,19 @@ evalExpr e v = evalExpr' e
     evalIs = evalBundle (\x -> if x == 0 then 1 else 0)
     evalExpnt = exp . negate . sum . map (\(i, lam) -> getValue i * lam) . IM.toList
 
+
+oneAtom :: Num a => Atom a
+oneAtom = Atom 1 emptyBundle emptyBundle emptyBundle IM.empty
+
+oneExpr :: Num a => Expr a
+oneExpr = ExprN (Term oneAtom [])
+
+zeroAtom :: Num a => Atom a
+zeroAtom = Atom 0 emptyBundle emptyBundle emptyBundle IM.empty
+
+isOneExpr :: (Ord a, Fractional a) => Expr a -> Bool
+isOneExpr = (== oneExpr) . deepExpand
+
 normalizeDs :: (Num a, Ord a) => Expr a -> Expr a
 normalizeDs = mapExpr normalizeDsTerm
 
@@ -217,8 +231,7 @@ cancelUsAtom (Atom k1 deltas units inds expnt) =
                         , Atom (1/(2^n) - 1/2) emptyBundle emptyBundle
                           (singletonBundle u) IM.empty
                         ]
-      one = Atom 1 emptyBundle emptyBundle emptyBundle IM.empty
-  in map (foldl productAtom atom) . sequence . ([one] :) . map makeGood $ unitsBad
+  in map (foldl productAtom atom) . sequence . ([oneAtom] :) . map makeGood $ unitsBad
 
 unifyAtom :: (Fractional a, Ord a, RealInfinite a) => Atom a -> Atom a
 unifyAtom = unifyByIndicatorAtom . unifyByDeltaAtom
