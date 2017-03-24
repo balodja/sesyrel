@@ -98,8 +98,12 @@ compileStaticFaultTree ft t = map (uncurry $ compileNode) $ unFaultTree ft
     --compileNode :: Floating k => Variable -> FaultTreeNode k -> StaticFactor k
     compileNode x (FaultTreeLambda l) =
       let p = exp (-l * t) in StaticFactor [x] (V.fromList [p, 1 - p])
-    compileNode x (FaultTreeOr a b) = generateStaticFactor [a, b, x] $
-                                        \[ba, bb, bx] -> if (ba || bb) == bx then 1.0 else 0.0
-    compileNode x (FaultTreeAnd a b) = generateStaticFactor [a, b, x] $
-                                         \[ba, bb, bx] -> if (ba && bb) == bx then 1.0 else 0.0
+    compileNode x (FaultTreeOr a b) | a /= b = generateStaticFactor [a, b, x] $
+                                               \[ba, bb, bx] -> if (ba || bb) == bx then 1.0 else 0.0
+                                    | otherwise = generateStaticFactor [a, x] $
+                                                  \[ba, bx] -> if ba == bx then 1.0 else 0.0
+    compileNode x (FaultTreeAnd a b) | a /= b = generateStaticFactor [a, b, x] $
+                                                \[ba, bb, bx] -> if (ba && bb) == bx then 1.0 else 0.0
+                                     | otherwise = generateStaticFactor [a, x] $
+                                                   \[ba, bx] -> if ba == bx then 1.0 else 0.0
     compileNode _ _ = error "compileFaultTreeStatic: this FaultTree is not static"
