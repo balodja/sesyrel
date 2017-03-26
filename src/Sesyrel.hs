@@ -10,7 +10,7 @@ import System.Log.FastLogger
 
 main :: IO ()
 main = withFastLogger (LogFileNoRotate "output.tex" 1048576) $ \logger ->
-  runLoggingT (mainD >> mainS) (\_ _ _ -> logger)
+  runLoggingT (mainS) (\_ _ _ -> logger)
 
 processDynamicFaultTree :: MonadLogger m => String -> Maybe [Variable] -> FaultTreeMonad Rational [Variable] -> m [DynamicFactor]
 processDynamicFaultTree name mbOrder ftreeM =
@@ -40,12 +40,19 @@ mainS =
 
 trees :: Fractional k => [(String, Maybe [Variable], FaultTreeMonad k [Variable], [Double])]
 trees =
-  [ ("ftree1", Nothing, simpleFaultTreeMonad, [1, 3])
+  [ ("voterTree", Nothing, testVoterM, [1, 3])
+  --, ("ftree1", Nothing, simpleFaultTreeMonad, [1, 3])
   --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeMonad, [])
   -- ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
   -- ("more electrical", Nothing, medianHydrosystemsM True >>= medianActuationsM True, [5e-6])
   -- ("electrical", Nothing, electroHydrosystemsM True False >>= electroActuationsM False, [5e-6])
   ]
+
+testVoterM :: Fractional k => FaultTreeMonad k [Variable]
+testVoterM = do
+  bases <- replicateM 100 (constantM 0.1)
+  v <- voterM 10 bases
+  return [v]
 
 testTreeM :: Fractional k => FaultTreeMonad k [Variable]
 testTreeM = do

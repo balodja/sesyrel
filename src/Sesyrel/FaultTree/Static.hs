@@ -98,6 +98,9 @@ compileStaticFaultTree ft t = map (uncurry $ compileNode) $ unFaultTree ft
     --compileNode :: Floating k => Variable -> FaultTreeNode k -> StaticFactor k
     compileNode x (FaultTreeLambda l) =
       let p = exp (-l * t) in StaticFactor [x] (V.fromList [p, 1 - p])
+    compileNode x (FaultTreeConstant c) = StaticFactor [x] (V.fromList [1 - c, c])
+    compileNode x (FaultTreeNot a) = generateStaticFactor [a, x] $
+                                     \[ba, bx] -> if ba == bx then 0.0 else 1.0
     compileNode x (FaultTreeOr a b) | a /= b = generateStaticFactor [a, b, x] $
                                                \[ba, bb, bx] -> if (ba || bb) == bx then 1.0 else 0.0
                                     | otherwise = generateStaticFactor [a, x] $

@@ -17,8 +17,9 @@ module Sesyrel.FaultTree.Base (
   , productFactors
   , variablesM
   , addNodeM
-  , lambdaM
-  , andM, orM
+  , lambdaM, constantM
+  , notM, andM, orM
+  , voterM
   , priorityAndOrM
   , switchM
   ) where
@@ -52,6 +53,8 @@ unFaultTree :: FaultTree k -> [(Variable, FaultTreeNode k)]
 unFaultTree (FaultTree ps) = ps
 
 data FaultTreeNode k = FaultTreeLambda k
+                     | FaultTreeConstant k
+                     | FaultTreeNot Variable
                      | FaultTreeAnd Variable Variable
                      | FaultTreeOr Variable Variable
                      | FaultTreePriorityAndOr Variable Variable Variable
@@ -62,6 +65,8 @@ isDynamic :: FaultTree k -> Bool
 isDynamic (FaultTree vs) = any isDynamic' $ map snd vs
   where
     isDynamic' (FaultTreeLambda _) = False
+    isDynamic' (FaultTreeConstant _) = False
+    isDynamic' (FaultTreeNot _) = False
     isDynamic' (FaultTreeAnd _ _) = False
     isDynamic' (FaultTreeOr _ _) = False
     isDynamic' (FaultTreePriorityAndOr _ _ _) = True
@@ -74,12 +79,25 @@ runFaultTreeMonadT :: Monad m => FaultTreeMonadT k m a -> m (a, FaultTree k)
 runFaultTreeMonadT a = (\(x, FaultTree s) -> (x, FaultTree $ reverse s)) <$>
                        runStateT a (FaultTree [])
 
-lambdaM :: Monad m => k -> FaultTreeMonadT k m Variable
+lambdaM, constantM :: Monad m => k -> FaultTreeMonadT k m Variable
 lambdaM = addNodeM . FaultTreeLambda
+constantM = addNodeM . FaultTreeConstant
+
+notM :: Monad m => Variable -> FaultTreeMonadT k m Variable
+notM = addNodeM . FaultTreeNot
 
 andM, orM :: Monad m => Variable -> Variable -> FaultTreeMonadT k m Variable
 andM a b = addNodeM $ FaultTreeAnd a b
 orM a b = addNodeM $ FaultTreeOr a b
+
+voterM :: (Num k, Monad m) => Int -> [Variable] -> FaultTreeMonadT k m Variable
+voterM k vars = do
+  initial <- replicateM k (constantM 0)
+  let step voters v = do
+        v0 <- constantM 1
+        zipWithM (\u u' -> andM v u' >>= orM u) voters (v0 : voters)
+  final <- foldM step initial vars
+  return $ last final
 
 priorityAndOrM, switchM :: Monad m => Variable -> Variable -> Variable -> FaultTreeMonadT k m Variable
 priorityAndOrM a b c = addNodeM $ FaultTreePriorityAndOr a b c
