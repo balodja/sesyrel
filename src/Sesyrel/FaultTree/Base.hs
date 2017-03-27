@@ -113,8 +113,16 @@ variablesM = do
   FaultTree nodes <- get
   return $ [0 .. (fromIntegral $ length nodes - 1)]
 
-faultTreeVariables :: FaultTree k -> [Variable]
-faultTreeVariables (FaultTree ps) = map fst ps
+faultTreeVariables :: FaultTree k -> [[Variable]]
+faultTreeVariables (FaultTree ps) = map (\(v, node) -> v : nodeVariables node) ps
+  where
+    nodeVariables (FaultTreeLambda _) = []
+    nodeVariables (FaultTreeConstant _) = []
+    nodeVariables (FaultTreeNot x) = [x]
+    nodeVariables (FaultTreeAnd x y) = [x, y]
+    nodeVariables (FaultTreeOr x y) = [x, y]
+    nodeVariables (FaultTreePriorityAndOr x y z) = [x, y, z]
+    nodeVariables (FaultTreeSwitch s x y) = [s, x, y]
 
 unionVariables :: [Variable] -> [Variable] -> [Variable]
 unionVariables (u : us) (v : vs) | u == v = v : unionVariables us vs

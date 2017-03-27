@@ -3,6 +3,7 @@
 import Sesyrel.FaultTree
 import Sesyrel.FaultTree.Dynamic
 import Sesyrel.FaultTree.Static
+import Sesyrel.FaultTree.Elimination (findOrdering, pretend)
 
 import Control.Monad (replicateM, forM_)
 import Control.Monad.Logger
@@ -36,6 +37,16 @@ mainS :: MonadLogger m => m ()
 mainS =
   let doIt (name, mbOrder, ftreeM, points) =
         processStaticFaultTree name mbOrder ftreeM points
+  in mapM_ doIt trees
+
+mainComplexity :: MonadLogger m => m ()
+mainComplexity =
+  let doIt (name, _, ftreeM, _) = do
+        let vars = faultTreeVariables . snd $ runFaultTreeMonad ftreeM
+            toElim = tail $ map head vars
+            ordering = findOrdering Nothing toElim vars
+            history = pretend ordering vars
+        undefined
   in mapM_ doIt trees
 
 trees :: Fractional k => [(String, Maybe [Variable], FaultTreeMonad k [Variable], [Double])]
