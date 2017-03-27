@@ -163,8 +163,8 @@ oneAtom = Atom 1 emptyBundle emptyBundle emptyBundle IM.empty
 oneExpr :: Num a => Expr a
 oneExpr = ExprN (Term oneAtom [])
 
-zeroAtom :: Num a => Atom a
-zeroAtom = Atom 0 emptyBundle emptyBundle emptyBundle IM.empty
+--zeroAtom :: Num a => Atom a
+--zeroAtom = Atom 0 emptyBundle emptyBundle emptyBundle IM.empty
 
 isOneExpr :: (Ord a, Fractional a) => Expr a -> Bool
 isOneExpr = (== oneExpr) . deepExpand

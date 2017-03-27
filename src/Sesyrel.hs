@@ -3,15 +3,18 @@
 import Sesyrel.FaultTree
 import Sesyrel.FaultTree.Dynamic
 import Sesyrel.FaultTree.Static
-import Sesyrel.FaultTree.Elimination (findOrdering, pretend)
+import Sesyrel.FaultTree.Elimination (Algorithm(..), findOrdering, pretend)
 
 import Control.Monad (replicateM, forM_)
 import Control.Monad.Logger
 import System.Log.FastLogger
+import Data.Monoid ((<>))
+
+import qualified Data.Text as T (pack)
 
 main :: IO ()
 main = withFastLogger (LogFileNoRotate "output.tex" 1048576) $ \logger ->
-  runLoggingT (mainS) (\_ _ _ -> logger)
+  runLoggingT (mainComplexity) (\_ _ _ -> logger)
 
 processDynamicFaultTree :: MonadLogger m => String -> Maybe [Variable] -> FaultTreeMonad Rational [Variable] -> m [DynamicFactor]
 processDynamicFaultTree name mbOrder ftreeM =
@@ -44,9 +47,10 @@ mainComplexity =
   let doIt (name, _, ftreeM, _) = do
         let vars = faultTreeVariables . snd $ runFaultTreeMonad ftreeM
             toElim = tail $ map head vars
-            ordering = findOrdering Nothing toElim vars
-            history = pretend ordering vars
-        undefined
+            ordering = findOrdering (Just GraphMinNeighbors) toElim vars
+        logInfoN $ "\\section{" <> T.pack name <> "}\n\n"
+        cliqueHistoryLog ordering vars
+        logInfoN "\n"
   in mapM_ doIt trees
 
 trees :: Fractional k => [(String, Maybe [Variable], FaultTreeMonad k [Variable], [Double])]
@@ -62,7 +66,7 @@ trees =
 testVoterM :: Fractional k => FaultTreeMonad k [Variable]
 testVoterM = do
   bases <- replicateM 100 (constantM 0.1)
-  v <- voterM 10 bases
+  v <- voterM 20 bases
   return [v]
 
 testTreeM :: Fractional k => FaultTreeMonad k [Variable]

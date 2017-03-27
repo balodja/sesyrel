@@ -138,3 +138,4 @@ compileDynamicFaultTree (FaultTree ft) = map reNode ft
     reNode (x, FaultTreeOr a b) = DynamicFactor (sort [x, a, b]) $ distributionOr (u x) (u a) (u b)
     reNode (x, FaultTreePriorityAndOr a b c) = DynamicFactor (sort [x, a, b, c]) $ distributionPriorityAndOr (u x) (u a) (u b) (u c)
     reNode (x, FaultTreeSwitch s a b) = DynamicFactor (sort [x, s, a, b]) $ distributionSwitch (u x) (u s) (u a) (u b)
+    reNode (x, f) = error $ "compileDynamicFaultTree: unsupported node found " ++ show f ++ " for variable " ++ show x

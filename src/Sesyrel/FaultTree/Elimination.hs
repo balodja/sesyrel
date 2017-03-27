@@ -1,4 +1,4 @@
-module Sesyrel.FaultTree.Elimination (findOrdering, pretend, Algorithm) where
+module Sesyrel.FaultTree.Elimination (findOrdering, pretend, Algorithm(..)) where
 
 import Sesyrel.FaultTree.Base (Variable)
 
