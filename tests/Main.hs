@@ -130,7 +130,7 @@ prop_dynamic_completeness :: Bool -> DynamicFaultTree -> Bool
 prop_dynamic_completeness full (DynamicFaultTree ft) = all checkFactors orders
   where
     factors = compileDynamicFaultTree ft
-    variables = faultTreeVariables ft
+    variables = map head $ faultTreeVariables ft
     checkFactors xs = isOneExpr . dynamicFactorExpr . productFactors $ factorsEliminate xs (not full) factors
     orders = if full then permutations variables else [variables]
 
@@ -138,7 +138,7 @@ prop_static_completeness :: Bool -> StaticFaultTree -> Bool
 prop_static_completeness full (StaticFaultTree time ft) = all checkFactors orders
   where
     factors = compileStaticFaultTree ft time
-    variables = faultTreeVariables ft
+    variables = map head $ faultTreeVariables ft
     checkFactors xs = checkOne . productFactors $ factorsEliminate xs (not full) factors
     checkOne (StaticFactor [] vec) = (V.length vec == 1) && ((vec V.! 0 - 1) < 1e-10)
     checkOne _ = error "prop_static_completeness: this should not happen"

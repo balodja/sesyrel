@@ -5,6 +5,7 @@ module Sesyrel.FaultTree (
   , compileDynamicFaultTree
   , compileStaticFaultTree
   , factorsLog
+  , cliqueHistoryLog
   , factorsEliminate
   , factorsEliminateM
   , factorsMarginalize
@@ -46,6 +47,16 @@ factorsEliminateVariableM var factors = do
   logInfoN $ "\\paragraph{Elimination result}\n" <> "$ \\ldots = $ " <> texify squeezed <> "\n\n"
   return $ squeezed : untouched
 
+cliqueHistoryLog :: MonadLogger m => [Variable] -> [[Variable]] -> m ()
+cliqueHistoryLog order factors = do
+  logInfoN $ "Elimination order: " <>
+    mconcat (intersperse ", " (map texify order)) <> "\n\n"
+  let cliques = pretend order factors
+  logInfoN . T.pack $ "Max clique size: " <> show (maximum [length c | gen <- cliques, c <- gen]) <> "\n\n"
+  logInfoN "Clique history: \n"
+  forM_ cliques $ \cs -> logInfoN ("\\\\ $ " <> mconcat (intersperse "," $ map texify cs) <> " $\n")
+  logInfoN "\n"
+
 {-
 factorsEliminateVariable :: Factor f => Variable -> [f] -> [f]
 factorsEliminateVariable var factors = noLogger (factorsEliminateVariableM var factors)
@@ -55,17 +66,12 @@ factorsEliminate :: Factor f => [Variable] -> Bool -> [f] -> [f]
 factorsEliminate elims algo factors = noLogger (factorsEliminateM elims algo factors)
 
 factorsEliminateM :: (Factor f, MonadLogger m) => [Variable] -> Bool -> [f] -> m [f]
-factorsEliminateM elims algo factors =
-  do
-    let order = if algo then findOrdering Nothing elims (map variables factors) else elims
-    logInfoN $ "Elimination order: " <>
-      mconcat (intersperse ", " (map texify order)) <> "\n\n"
-    let cliques = pretend order (map variables factors)
-    logInfoN "Clique history: \n"
-    forM_ cliques $ \cs -> logInfoN ("\\\\ $ " <> mconcat (intersperse "," $ map texify cs) <> " $\n")
-    logInfoN "\n"
-    go factors order
+factorsEliminateM elims algo factors = do
+  cliqueHistoryLog order vars
+  go factors order
   where
+    vars = map variables factors
+    order = if algo then findOrdering Nothing elims vars else elims
     go fs [] = return fs
     go fs (v : vs) = do
               fs' <- factorsEliminateVariableM v fs
