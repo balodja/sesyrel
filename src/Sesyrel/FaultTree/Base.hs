@@ -22,7 +22,7 @@ module Sesyrel.FaultTree.Base (
   , twoBitsAdderM, threeBitsAdderM
   , twoRegistersAdderM, literalToRegisterAdderM
   , treeSumM, equalsM, notLessM
-  , treeVoterM, foldingVoterM, voterEqualsM
+  , treeVoterM, treeVoterEqualsM, foldingVoterM, foldingVoterEqualsM
   , naiveVoterM
   , priorityAndOrM
   , switchM
@@ -190,10 +190,8 @@ compareToLiteralM k vars = do
 
 equalsM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
 equalsM k vars = do
-  (any', c) <- compareToLiteralM k vars
-  notAny' <- notM any'
-  notC <- notM c
-  andM notAny' notC
+  (any', _) <- compareToLiteralM k vars
+  notM any'
 
 notLessM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
 notLessM k vars = do
@@ -239,13 +237,20 @@ treeSumM n vars = do {ps <- split vars; doSum ps}
 bitsN :: Int -> Int
 bitsN k = ceiling . (\x -> log (x :: Double) / log 2) $ 1 + realToFrac k
 
-voterEqualsM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
-voterEqualsM k vars = do
+treeVoterEqualsM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
+treeVoterEqualsM k vars = do
   (sumVars, cfMb) <- treeSumM (bitsN k) vars
   fVar <- equalsM k sumVars
   case cfMb of
     Nothing -> return fVar
     Just cf -> do { notCf <- notM cf; andM notCf fVar }
+
+foldingVoterEqualsM :: (Num k, Monad m) => Int -> [Variable] -> FaultTreeMonadT k m Variable
+foldingVoterEqualsM k vars = do
+  (sumVars, cf) <- foldSumM (bitsN k) vars
+  fVar <- equalsM k sumVars
+  notCf <- notM cf
+  andM notCf fVar
 
 foldingVoterM :: (Num k, Monad m) => Int -> [Variable] -> FaultTreeMonadT k m Variable
 foldingVoterM k vars = do
