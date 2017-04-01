@@ -19,10 +19,10 @@ module Sesyrel.FaultTree.Base (
   , addNodeM
   , lambdaM, constantM
   , notM, andM, orM, xorM
-  , oneAdderM, fullOneAdderM
-  , adderM, compiledAdderM
-  , sumM, equalsM, notLessM
-  , voterM, voterEqualsM
+  , twoBitsAdderM, threeBitsAdderM
+  , twoRegistersAdderM, literalToRegisterAdderM
+  , treeSumM, equalsM, notLessM
+  , treeVoterM, foldingVoterM, voterEqualsM
   , naiveVoterM
   , priorityAndOrM
   , switchM
@@ -100,7 +100,7 @@ xorM a b = addNodeM $ FaultTreeXor a b
 
 foldVarsM :: Monad m => (Variable -> Variable -> FaultTreeMonadT k m Variable) ->
              [Variable] -> FaultTreeMonadT k m (Maybe Variable)
-foldVarsM f [] = return Nothing
+foldVarsM _ [] = return Nothing
 foldVarsM f vs = foldM (\mb v -> Just <$> maybe (return v) (f v) mb) Nothing vs
 
 naiveVoterM :: (Num k, Monad m) => Int -> [Variable] -> FaultTreeMonadT k m Variable
@@ -112,16 +112,16 @@ naiveVoterM k vars = do
   final <- foldM step initial vars
   return $ last final
 
-oneAdderM :: Monad m => Variable -> Variable -> FaultTreeMonadT k m (Variable, Variable)
-oneAdderM a b = do
+twoBitsAdderM :: Monad m => Variable -> Variable -> FaultTreeMonadT k m (Variable, Variable)
+twoBitsAdderM a b = do
   s <- xorM a b
   c <- andM a b
   return (s, c)
 
-fullOneAdderM :: Monad m =>
+threeBitsAdderM :: Monad m =>
              Variable -> Variable ->
              Variable -> FaultTreeMonadT k m (Variable, Variable)
-fullOneAdderM a b c = do
+threeBitsAdderM a b c = do
   aXb <- xorM a b
   s <- xorM aXb c
   aXbc <- andM aXb c
@@ -129,35 +129,43 @@ fullOneAdderM a b c = do
   c' <- orM ab aXbc -- xorM ab aXbc also possible, as c = ab `xor` bc `xor` ac
   return (s, c')
 
-onePlusOneAdderM :: Monad m => Variable -> Variable -> FaultTreeMonadT k m (Variable, Variable)
-onePlusOneAdderM a b = do
+twoBitsPlusOneAdderM :: Monad m => Variable -> Variable -> FaultTreeMonadT k m (Variable, Variable)
+twoBitsPlusOneAdderM a b = do
   notB <- notM b
   s <- xorM a notB
   aNotB <- andM a notB
   c <- xorM aNotB b
   return (s, c)
 
-adderM :: Monad m => [Variable] -> [Variable] -> FaultTreeMonadT k m ([Variable], Maybe Variable)
-adderM xs' ys' = go xs' ys' Nothing
+twoRegistersAdderM :: Monad m => [Variable] -> [Variable] -> FaultTreeMonadT k m ([Variable], Maybe Variable)
+twoRegistersAdderM xs' ys' = go xs' ys' Nothing
   where
     go (x : xs) (y : ys) c = do
-      (z, c') <- maybe (oneAdderM x y) (fullOneAdderM x y) c
+      (z, c') <- maybe (twoBitsAdderM x y) (threeBitsAdderM x y) c
       (as, c'') <- go xs ys (Just c')
       return (z : as, c'')
     go [] (y : ys) (Just c) = do
-      (z, c') <- oneAdderM y c
+      (z, c') <- twoBitsAdderM y c
       (as, c'') <- go [] ys (Just c')
       return (z : as, c'')
-    go [] ys Nothing = return (ys, Nothing)
+    go [] ys c = return (ys, c)
     go xs [] c = go [] xs c
 
-compiledAdderM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m ([Variable], Maybe Variable)
-compiledAdderM k' vars = go k' vars Nothing
+
+bitToRegisterAdderM :: Monad m => Variable -> [Variable] -> FaultTreeMonadT k m ([Variable], Variable)
+bitToRegisterAdderM b reg = (\(dl, cf) -> (dl [], cf)) <$> foldM step (id, b) reg
+  where
+    step (dl, x) y = do
+      (z, c) <- twoBitsAdderM x y
+      return (dl . (z :), c)
+
+literalToRegisterAdderM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m ([Variable], Maybe Variable)
+literalToRegisterAdderM k' vars = go k' vars Nothing
   where
     go k (x : xs) (Just c) = do
       (s, c') <- if k `mod` 2 == 0
-                 then oneAdderM x c
-                 else onePlusOneAdderM x c
+                 then twoBitsAdderM x c
+                 else twoBitsPlusOneAdderM x c
       (ss, c'') <- go (k `div` 2) xs (Just c')
       return (s : ss, c'')
     go k (x : xs) Nothing = do
@@ -173,30 +181,40 @@ extractVariables (Just a) (Just c) = (a, c)
 extractVariables Nothing _ = error "equalsM, notLessM: 0-order logic, don't"
 extractVariables _ Nothing = error "equalsM, notLessM: comparison to (2^order) is not possible"
 
-addForComparisonM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m (Variable, Variable)
-addForComparisonM k vars = do
+compareToLiteralM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m (Variable, Variable)
+compareToLiteralM k vars = do
   let n = length vars
-  (vars', cMb) <- compiledAdderM (2 ^ n - k) vars
+  (vars', cMb) <- literalToRegisterAdderM (2 ^ n - k) vars
   anyMb <- foldVarsM orM vars'
   return $ extractVariables anyMb cMb
 
 equalsM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
 equalsM k vars = do
-  (any', c) <- addForComparisonM k vars
+  (any', c) <- compareToLiteralM k vars
   notAny' <- notM any'
   notC <- notM c
   andM notAny' notC
 
 notLessM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
 notLessM k vars = do
-  (_, c) <- addForComparisonM k vars
+  (_, c) <- compareToLiteralM k vars
   return c
 
-sumM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m ([Variable], Maybe Variable)
-sumM n vars = do {ps <- split vars; doSum ps}
+foldSumM :: (Monad m, Num k)=> Int -> [Variable] -> FaultTreeMonadT k m ([Variable], Variable)
+foldSumM n vars = do
+  let step (reg, cf) v = do
+        (reg', cf') <- bitToRegisterAdderM v reg
+        cf'' <- orM cf cf'
+        return (reg', cf'')
+  accumRegister <- replicateM n (constantM 0)
+  accumCf <- constantM 0
+  foldM step (accumRegister, accumCf) vars
+
+treeSumM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m ([Variable], Maybe Variable)
+treeSumM n vars = do {ps <- split vars; doSum ps}
   where
-    split (v1 : v2 : v3 : vs) = do {(s, c) <- fullOneAdderM v1 v2 v3; r <- split vs; return $ ([s, c], Nothing) : r}
-    split [v1, v2] = do {(s, c) <- oneAdderM v1 v2; return [([s, c], Nothing)]}
+    split (v1 : v2 : v3 : vs) = do {(s, c) <- threeBitsAdderM v1 v2 v3; r <- split vs; return $ ([s, c], Nothing) : r}
+    split [v1, v2] = do {(s, c) <- twoBitsAdderM v1 v2; return [([s, c], Nothing)]}
     split [v1] = return [([v1], Nothing)]
     split [] = return [([], Nothing)]
     doSum [p] = return p
@@ -206,14 +224,14 @@ sumM n vars = do {ps <- split vars; doSum ps}
     step [p] = return [p]
     step [] = return []
     sumTwo (vs1, Nothing) (vs2, Nothing) = do
-      (vs3, c3) <- adderM vs1 vs2
+      (vs3, c3) <- twoRegistersAdderM vs1 vs2
       case c3 of
         Just c -> return $ if length vs3 == n
                            then (vs3, Just c)
                            else (vs3 ++ [c], Nothing)
         Nothing -> return (vs3, Nothing)
     sumTwo (vs1, c1) (vs2, c2) = do
-      (vs3, c3) <- adderM vs1 vs2
+      (vs3, c3) <- twoRegistersAdderM vs1 vs2
       let cs = catMaybes [c1, c2, c3]
       c <- foldVarsM orM cs
       return (vs3, c)
@@ -223,15 +241,21 @@ bitsN k = ceiling . (\x -> log (x :: Double) / log 2) $ 1 + realToFrac k
 
 voterEqualsM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
 voterEqualsM k vars = do
-  (sumVars, cfMb) <- sumM (bitsN k) vars
+  (sumVars, cfMb) <- treeSumM (bitsN k) vars
   fVar <- equalsM k sumVars
   case cfMb of
     Nothing -> return fVar
     Just cf -> do { notCf <- notM cf; andM notCf fVar }
 
-voterM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
-voterM k vars = do
-  (sumVars, cfMb) <- sumM (bitsN k) vars
+foldingVoterM :: (Num k, Monad m) => Int -> [Variable] -> FaultTreeMonadT k m Variable
+foldingVoterM k vars = do
+  (sumVars, cf) <- foldSumM (bitsN k) vars
+  fVar <- notLessM k sumVars
+  orM fVar cf
+
+treeVoterM :: Monad m => Int -> [Variable] -> FaultTreeMonadT k m Variable
+treeVoterM k vars = do
+  (sumVars, cfMb) <- treeSumM (bitsN k) vars
   fVar <- notLessM k sumVars
   case cfMb of
     Nothing -> return fVar

@@ -5,7 +5,7 @@ import Sesyrel.FaultTree.Dynamic
 import Sesyrel.FaultTree.Static
 import Sesyrel.FaultTree.Elimination (Algorithm(..), findOrdering, pretend)
 
-import Control.Monad (replicateM, forM_)
+import Control.Monad (replicateM, forM_, foldM)
 import Control.Monad.Logger
 import System.Log.FastLogger
 import Data.Monoid ((<>))
@@ -14,7 +14,7 @@ import qualified Data.Text as T (pack)
 
 main :: IO ()
 main = withFastLogger (LogFileNoRotate "output.tex" 1048576) $ \logger ->
-  runLoggingT (mainComplexity) (\_ _ _ -> logger)
+  runLoggingT (mainS) (\_ _ _ -> logger)
 
 processDynamicFaultTree :: MonadLogger m => String -> Maybe [Variable] -> FaultTreeMonad Rational [Variable] -> m [DynamicFactor]
 processDynamicFaultTree name mbOrder ftreeM =
@@ -45,9 +45,10 @@ mainS =
 mainComplexity :: MonadLogger m => m ()
 mainComplexity =
   let doIt (name, _, ftreeM, _) = do
-        let vars = faultTreeVariables . snd $ runFaultTreeMonad ftreeM
+        let vars = faultTreeVariables faultTree
+            faultTree = snd $ runFaultTreeMonad ftreeM
             toElim = tail $ map head vars
-            ordering = findOrdering (Just GraphMinNeighbors) toElim vars
+            ordering = findOrdering (Just MinCardinality) toElim vars
         logInfoN $ "\\section{" <> T.pack name <> "}\n\n"
         cliqueHistoryLog ordering vars
         logInfoN "\n"
@@ -55,7 +56,7 @@ mainComplexity =
 
 trees :: Fractional k => [(String, Maybe [Variable], FaultTreeMonad k [Variable], [Double])]
 trees =
-  [ ("voterTree", Nothing, testVoterM, [1, 3])
+  [ ("voterTree", Nothing, moreTestVoterM, [1, 3])
   --, ("ftree1", Nothing, simpleFaultTreeMonad, [1, 3])
   --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeMonad, [])
   -- ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
@@ -66,7 +67,19 @@ trees =
 testVoterM :: Fractional k => FaultTreeMonad k [Variable]
 testVoterM = do
   bases <- replicateM 100 (constantM 0.1)
-  v <- voterM 20 bases
+  v <- foldingVoterM 20 bases
+  return [v]
+
+moreTestVoterM :: Fractional k => FaultTreeMonad k [Variable]
+moreTestVoterM = do
+  bases <- replicateM 100 (constantM 0.1)
+  let f (dl, x) y = do
+        z <- orM x y
+        a <- constantM 0.1
+        t <- orM a z
+        return $ (dl . (t :), z)
+  (dl, _) <- foldM f (id, head bases) $ tail bases
+  v <- foldingVoterM 20 (dl [])
   return [v]
 
 testTreeM :: Fractional k => FaultTreeMonad k [Variable]
