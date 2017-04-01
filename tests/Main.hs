@@ -41,6 +41,12 @@ data StaticFaultTree = StaticFaultTree Double (FaultTree Double)
 newtype DynamicFaultTree = DynamicFaultTree (FaultTree Rational)
                            deriving Show
 
+data VoterFaultTree = VoterFaultTree {
+    voterFaultTreeN :: Int
+  , voterFaultTreeK :: Int
+  , voterFaultTreeBases :: [Bool]
+  } deriving Show
+
 monadToDyn :: Monad m => FaultTreeMonadT Rational m a -> m DynamicFaultTree
 monadToDyn act = (DynamicFaultTree . snd) <$> (runFaultTreeMonadT act)
 
@@ -125,6 +131,18 @@ instance Arbitrary DynamicFaultTree where
 
   shrink (DynamicFaultTree tree) = map DynamicFaultTree $ shrinkFaultTree tree
 
+instance Arbitrary VoterFaultTree where
+  arbitrary = do
+    n <- choose (5, 15)
+    vals <- replicateM n arbitrary
+    k <- choose (2, 10)
+    return $ VoterFaultTree n k vals
+
+  shrink (VoterFaultTree n k vals) = tail $ do
+    n' <- if n < 3 then [n] else [n, n - 1]
+    k' <- if k < 3 then [k] else [k, k - 1]
+    vals' <- if n' == n then [vals] else map snd (fingers vals)
+    return $ VoterFaultTree n' k' vals'
 
 prop_dynamic_completeness :: Bool -> DynamicFaultTree -> Bool
 prop_dynamic_completeness full (DynamicFaultTree ft) = all checkFactors orders
@@ -143,6 +161,20 @@ prop_static_completeness full (StaticFaultTree time ft) = all checkFactors order
     checkOne (StaticFactor [] vec) = (V.length vec == 1) && ((vec V.! 0 - 1) < 1e-10)
     checkOne _ = error "prop_static_completeness: this should not happen"
     orders = if full then permutations variables else [variables]
+
+voterFaultTreeCompile :: Bool -> VoterFaultTree -> (Variable, FaultTree Double)
+voterFaultTreeCompile flag (VoterFaultTree n k vals) = runFaultTreeMonad $ do
+  vars <- mapM (constantM . toEnum . fromEnum) vals
+  (if flag then foldingVoterEqualsM else foldingVoterM) k vars
+
+prop_voter_correctness :: Bool -> VoterFaultTree -> Bool
+prop_voter_correctness flag voter@(VoterFaultTree n k vals) = foldedResult == expectedResult
+  where
+    (top, faultTree) = voterFaultTreeCompile flag voter
+    factors = compileStaticFaultTree faultTree (0.0 :: Double)
+    StaticFactor _ vec = productFactors $ factorsMarginalize [top] factors
+    foldedResult = abs (vec V.! 1 - 1.0) < 1e-5
+    expectedResult = (if flag then (== k) else (>= k)) $ sum (map fromEnum vals)
 
 tree1 :: Num k => FaultTree k
 tree1 = snd . runFaultTreeMonad $ do
@@ -228,5 +260,12 @@ tests_static_completeness =
     (once $ prop_static_completeness True $ StaticFaultTree 1.5 tree3)
   ]
 
+tests_voter_correctness :: Test
+tests_voter_correctness =
+  testGroup "Voter-k/n over determenistic distributions should be correct"
+  [ testProperty "random classic voters over random values" (prop_voter_correctness False)
+  , testProperty "random exact voters over random values" (prop_voter_correctness True)
+  ]
+
 main :: IO ()
-main = defaultMain [ tests_static_completeness ]
+main = defaultMain [ tests_dynamic_completeness, tests_static_completeness, tests_voter_correctness ]
