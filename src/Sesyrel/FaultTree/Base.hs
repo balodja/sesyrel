@@ -253,6 +253,8 @@ foldingVoterEqualsM k vars = do
   andM notCf fVar
 
 foldingVoterM :: (Num k, Monad m) => Int -> [Variable] -> FaultTreeMonadT k m Variable
+foldingVoterM 0 _ = constantM 1
+foldingVoterM 1 vars = foldVarsM orM vars >>= maybe (constantM 0) return
 foldingVoterM k vars = do
   (sumVars, cf) <- foldSumM (bitsN k) vars
   fVar <- notLessM k sumVars
