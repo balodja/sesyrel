@@ -5,6 +5,7 @@ module Sesyrel.FaultTree (
   , compileDynamicFaultTree
   , compileStaticFaultTree
   , factorsLog
+  , eliminationOrderLog
   , cliqueHistoryLog
   , factorsEliminate
   , factorsEliminateM
@@ -47,31 +48,34 @@ factorsEliminateVariableM var factors = do
   logInfoN $ "\\paragraph{Elimination result}\n" <> "$ \\ldots = $ " <> texify squeezed <> "\n\n"
   return $ squeezed : untouched
 
-cliqueHistoryLog :: MonadLogger m => [Variable] -> [[Variable]] -> m ()
-cliqueHistoryLog order factors = do
+eliminationOrderLog :: MonadLogger m => [(Variable, Int)] -> m ()
+eliminationOrderLog order = do
   logInfoN $ "Elimination order: " <>
-    mconcat (intersperse ", " (map texify order)) <> "\n\n"
-  let cliques = pretend order factors
-  logInfoN . T.pack $ "Max clique size: " <> show (maximum [length c | gen <- cliques, c <- gen]) <> "\n\n"
-  logInfoN "Clique history: \n"
-  forM_ cliques $ \cs -> logInfoN ("\\\\ $ " <> mconcat (intersperse "," $ map texify cs) <> " $\n")
-  logInfoN "\n"
+    mconcat (intersperse ", " (map (texify . fst) order)) <> "\n\n"
+  logInfoN . T.pack $ "Max produced clique size: " <>
+    show (maximum $ map snd order) <> "\n\n"
+  logInfoN . T.pack $ "History: " <> show order <> "\n\n"
 
-{-
-factorsEliminateVariable :: Factor f => Variable -> [f] -> [f]
-factorsEliminateVariable var factors = noLogger (factorsEliminateVariableM var factors)
--}
+cliqueHistoryLog :: MonadLogger m => [[[Variable]]] -> m ()
+cliqueHistoryLog history = do
+  logInfoN . T.pack $ "Real max produced clique size: " <> show (maximum [length $ head gen | gen <- tail history]) <> "\n\n"
+  logInfoN "Clique history: \n"
+  forM_ history $ \cs -> logInfoN ("\\\\ $ " <> mconcat (intersperse "," $ map texify cs) <> " $\n")
+  logInfoN "\n"
 
 factorsEliminate :: Factor f => [Variable] -> Bool -> [f] -> [f]
 factorsEliminate elims algo factors = noLogger (factorsEliminateM elims algo factors)
 
 factorsEliminateM :: (Factor f, MonadLogger m) => [Variable] -> Bool -> [f] -> m [f]
 factorsEliminateM elims algo factors = do
-  cliqueHistoryLog order vars
-  go factors order
+  eliminationOrderLog order
+  cliqueHistoryLog history
+  go factors (map fst order)
   where
     vars = map variables factors
-    order = if algo then findOrdering Nothing elims vars else elims
+    history = pretend (if algo then map fst order else elims) vars
+    sizes = [length $ head gen | gen <- tail history]
+    order = if algo then findOrdering Nothing elims vars else zip elims sizes
     go fs [] = return fs
     go fs (v : vs) = do
               fs' <- factorsEliminateVariableM v fs

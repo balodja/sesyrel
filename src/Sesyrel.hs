@@ -9,7 +9,9 @@ import Control.Monad (replicateM, forM_, foldM)
 import Control.Monad.Logger
 import System.Log.FastLogger
 import Data.Monoid ((<>))
+import Data.Maybe (fromJust)
 
+import Data.List (delete)
 import qualified Data.Text as T (pack)
 
 main :: IO ()
@@ -46,11 +48,12 @@ mainComplexity :: MonadLogger m => m ()
 mainComplexity =
   let doIt (name, _, ftreeM, _) = do
         let vars = faultTreeVariables faultTree
-            faultTree = snd $ runFaultTreeMonad ftreeM
-            toElim = tail $ map head vars
-            ordering = findOrdering (Just MinCardinality) toElim vars
+            (topVar : _, faultTree) = runFaultTreeMonad ftreeM
+            toElim = delete topVar $ foldl1 unionVariables vars
+            ordering = findOrdering (Just GraphMinNeighbors) toElim vars
         logInfoN $ "\\section{" <> T.pack name <> "}\n\n"
-        cliqueHistoryLog ordering vars
+        eliminationOrderLog ordering
+        cliqueHistoryLog $ pretend (map fst ordering) vars
         logInfoN "\n"
   in mapM_ doIt trees
 
