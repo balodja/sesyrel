@@ -16,7 +16,7 @@ import qualified Data.Set as S
 type Clique = Set Variable
 type Graph = Map Variable (Set Variable)
 
-data Algorithm = GraphMinFill | GraphMinNeighbors | MinCardinality
+data Algorithm = GraphMinFill | GraphMinNeighbors
 
 pretend :: [Variable] -> [[Variable]] -> [[[Variable]]]
 pretend vs = map (map S.toList) . pretend' vs . map S.fromList
@@ -37,20 +37,9 @@ findOrdering :: Maybe Algorithm -> [Variable] -> [[Variable]] -> [(Variable, Int
 findOrdering alg vs cs = findOrdering' alg (S.fromList vs) $ map S.fromList cs
 
 findOrdering' :: Maybe Algorithm -> Set Variable -> [Clique] -> [(Variable, Int)]
-findOrdering' Nothing = findOrdering' (Just MinCardinality)
+findOrdering' Nothing = findOrdering' (Just GraphMinNeighbors)
 findOrdering' (Just GraphMinFill) = findGraphOrdering costFunctionMinFill
 findOrdering' (Just GraphMinNeighbors) = findGraphOrdering costFunctionMinNeighbors
-findOrdering' (Just MinCardinality) = findMinCardinalityOrdering
-
-findMinCardinalityOrdering :: Set Variable -> [Clique] -> [(Variable, Int)]
-findMinCardinalityOrdering vs cliques | S.null vs = []
-                                      | otherwise =
-  let costFun v' = length . fst $ escapeClique v' cliques
-      v = getNextVertex costFun vs
-      (c, rest) = escapeClique v cliques
-      sz = length rest
-      continue = findMinCardinalityOrdering (S.delete v vs) (c : rest)
-  in v `seq` sz `seq` ((v, sz) : continue)
 
 findGraphOrdering :: (Graph -> Variable -> Int) -> Set Variable -> [Clique] -> [(Variable, Int)]
 findGraphOrdering costFunction vars cliques = go vars (makeGraph cliques)
