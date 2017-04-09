@@ -16,7 +16,7 @@ import qualified Data.Text as T (pack)
 
 main :: IO ()
 main = withFastLogger (LogFileNoRotate "output.tex" 1048576) $ \logger ->
-  runLoggingT (mainS) (\_ _ _ -> logger)
+  runLoggingT (mainComplexity) (\_ _ _ -> logger)
 
 processDynamicFaultTree :: MonadLogger m => String -> Maybe [Variable] -> FaultTreeMonad Rational [Variable] -> m [DynamicFactor]
 processDynamicFaultTree name mbOrder ftreeM =
@@ -59,7 +59,7 @@ mainComplexity =
 
 trees :: Fractional k => [(String, Maybe [Variable], FaultTreeMonad k [Variable], [Double])]
 trees =
-  [ ("voterTree", Nothing, moreTestVoterM, [1, 3])
+  [ ("voterTree", Nothing, moreTestVoterM, [1])
   --, ("ftree1", Nothing, simpleFaultTreeMonad, [1, 3])
   --, ("ftree1", Just [4, 1, 3, 2], simpleFaultTreeMonad, [])
   -- ("traditional", Nothing, traditionalHydrosystemsM True >>= traditionalActuationsM True, [5e-6])
@@ -75,7 +75,7 @@ testVoterM = do
 
 moreTestVoterM :: Fractional k => FaultTreeMonad k [Variable]
 moreTestVoterM = do
-  bases <- replicateM 100 (constantM 0.1)
+  bases <- replicateM 200 (constantM 0.1)
   let f (dl, x) y = do
         z <- orM x y
         a <- constantM 0.1

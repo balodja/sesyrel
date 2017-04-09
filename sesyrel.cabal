@@ -6,12 +6,36 @@ Maintainer:		balodja@gmail.com
 Build-Type:		Simple
 Cabal-Version:		>= 1.8
 
-Executable sesyrel
-  Main-is:		Sesyrel.hs
-  Hs-Source-Dirs:	src
-  GHC-Options:		-Wall -O2
-  -- -prof -fprof-auto -fprof-cafs -rtsopts
+Library
+  Hs-Source-Dirs:       src
+  Exposed-Modules:
+    Sesyrel.Expression,
+    Sesyrel.Expression.Base,
+    Sesyrel.Expression.Integration,
+    Sesyrel.Expression.Ratio,
+    Sesyrel.Expression.RealInfinite,
+    Sesyrel.FaultTree,
+    Sesyrel.FaultTree.Base,
+    Sesyrel.FaultTree.Elimination,
+    Sesyrel.FaultTree.Dynamic,
+    Sesyrel.FaultTree.Static,
+    Sesyrel.Texify
   Build-Depends:
+    base >= 4,
+    containers,
+    mtl >= 2,
+    multiset,
+    text >= 0.11,
+    vector >= 0.11.0.0,
+    monad-logger,
+    fast-logger
+
+Executable sesyrel-example
+  Main-is:		Main.hs
+  Hs-Source-Dirs:	example
+  GHC-Options:		-Wall -O2
+  Build-Depends:
+    sesyrel,
     base >= 4,
     containers,
     mtl >= 2,
@@ -24,8 +48,9 @@ Executable sesyrel
 Test-suite sesyrel-test
   Type:			exitcode-stdio-1.0
   Main-is:		Main.hs
-  Hs-Source-Dirs:	tests, src
+  Hs-Source-Dirs:	tests
   Build-Depends:
+    sesyrel,
     QuickCheck >= 2,
     base >= 4,
     containers,
@@ -38,4 +63,3 @@ Test-suite sesyrel-test
     monad-logger,
     fast-logger,
     random
-  
