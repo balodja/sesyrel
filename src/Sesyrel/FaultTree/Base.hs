@@ -18,7 +18,7 @@ module Sesyrel.FaultTree.Base (
   , variablesM
   , addNodeM
   , lambdaM, constantM
-  , notM, andM, orM, xorM
+  , notM, andM, orM, xorM, foldVarsM
   , twoBitsAdderM, threeBitsAdderM
   , twoRegistersAdderM, literalToRegisterAdderM
   , treeSumM, equalsM, notLessM
