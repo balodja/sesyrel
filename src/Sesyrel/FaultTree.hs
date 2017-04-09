@@ -54,7 +54,7 @@ eliminationOrderLog order = do
     mconcat (intersperse ", " (map (texify . fst) order)) <> "\n\n"
   logInfoN . T.pack $ "Max produced clique size: " <>
     show (maximum $ map snd order) <> "\n\n"
-  logInfoN . T.pack $ "History: " <> show order <> "\n\n"
+  --logInfoN . T.pack $ "History: " <> show order <> "\n\n"
 
 cliqueHistoryLog :: MonadLogger m => [[[Variable]]] -> m ()
 cliqueHistoryLog history = do
@@ -69,7 +69,7 @@ factorsEliminate elims algo factors = noLogger (factorsEliminateM elims algo fac
 factorsEliminateM :: (Factor f, MonadLogger m) => [Variable] -> Bool -> [f] -> m [f]
 factorsEliminateM elims algo factors = do
   eliminationOrderLog order
-  cliqueHistoryLog history
+  --cliqueHistoryLog history
   go factors (map fst order)
   where
     vars = map variables factors
