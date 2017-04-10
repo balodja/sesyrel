@@ -295,9 +295,9 @@ faultTreeVariables (FaultTree ps) = map (\(v, node) -> v : nodeVariables node) p
     nodeVariables (FaultTreeSwitch s x y) = [s, x, y]
 
 unionVariables :: [Variable] -> [Variable] -> [Variable]
-unionVariables (u : us) (v : vs) | u == v = v : unionVariables us vs
-                            | u < v = u : unionVariables us (v : vs)
-                            | otherwise = v : unionVariables (u : us) vs
+unionVariables uu@(u : us) vv@(v : vs) | u == v = v : unionVariables us vs
+                                       | u < v = u : unionVariables us vv
+                                       | otherwise = v : unionVariables uu vs
 unionVariables [] vs = vs
 unionVariables us [] = us
 

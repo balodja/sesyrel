@@ -4,7 +4,7 @@ module Sesyrel.FaultTree.Static
        , StaticFactor(..)
        ) where
 
-import qualified Data.Vector as V
+import qualified Data.Vector.Unboxed as V
 import Data.List (sort, sortBy, elemIndex)
 import Data.Monoid ((<>))
 import Data.Function (on)
@@ -14,17 +14,17 @@ import Sesyrel.FaultTree.Base
 import Sesyrel.Texify (Texifiable(..), texify)
 
 data StaticFactor k = StaticFactor {
-    factorVariables :: [Variable]
-  , factorData :: V.Vector k
+    factorVariables :: ![Variable]
+  , factorData :: !(V.Vector k)
   } deriving (Show, Ord, Eq)
 
-instance Show k => Texifiable (StaticFactor k) where
+instance (Show k, V.Unbox k) => Texifiable (StaticFactor k) where
   texify' (StaticFactor vars vector) = "variables " <> texify' vars <> ", data " <> sToB (V.toList vector)
     where
       sToB :: Show a => a -> TB.Builder
       sToB = TB.fromString . show
 
-instance (Show k, Fractional k) => Factor (StaticFactor k) where
+instance (Show k, Fractional k, V.Unbox k) => Factor (StaticFactor k) where
   variables = factorVariables
   eliminate v f@(StaticFactor vs a) = maybe f eliminate' (elemIndex v vs)
     where
@@ -35,7 +35,7 @@ instance (Show k, Fractional k) => Factor (StaticFactor k) where
   one = StaticFactor [] (V.singleton 1.0)
   texifyVariableElimination var factor = "eliminating " <> texify var <> " in " <> texify factor
 
-generateStaticFactor :: [Variable] -> ([Bool] -> k) -> StaticFactor k
+generateStaticFactor :: V.Unbox k => [Variable] -> ([Bool] -> k) -> StaticFactor k
 generateStaticFactor vars gen = StaticFactor (sort vars) (V.generate (2 ^ n) gen')
   where
     n = length vars
@@ -52,8 +52,8 @@ inversePermutation = sortingByPermutation compare
 applyPermutation :: [Int] -> [a] -> [a]
 applyPermutation pmt xs = map (xs !!) pmt
 
-times' :: Num k => StaticFactor k -> StaticFactor k -> StaticFactor k
-times' (StaticFactor vs1 a1) (StaticFactor vs2 a2) = StaticFactor vs $ V.zipWith (*) a1' a2'
+times' :: (Num k, V.Unbox k) => StaticFactor k -> StaticFactor k -> StaticFactor k
+times' (StaticFactor vs1 a1) (StaticFactor vs2 a2) = StaticFactor vs . V.force $ V.zipWith (*) a1' a2'
   where
     a1' = expandArray a1 (calcExpands vs1 vs 0)
     a2' = expandArray a2 (calcExpands vs2 vs 0)
@@ -65,10 +65,10 @@ times' (StaticFactor vs1 a1) (StaticFactor vs2 a2) = StaticFactor vs $ V.zipWith
     calcExpands [] [] _ = []
     calcExpands (_ : _) [] _ = error "calcExpands: something really went wrong"
 
-expandArray :: V.Vector k -> [Int] -> V.Vector k
+expandArray :: V.Unbox k => V.Vector k -> [Int] -> V.Vector k
 expandArray = foldl expandArrayBy1
 
-expandArrayBy1 :: V.Vector k -> Int -> V.Vector k
+expandArrayBy1 :: V.Unbox k => V.Vector k -> Int -> V.Vector k
 expandArrayBy1 vec n = V.concat . doubleList $ cutInSlices vec $ 2 ^ n
 
 doubleList :: [a] -> [a]
@@ -80,7 +80,7 @@ halfList f (v1 : v2 : vs) = f v1 v2 : halfList f vs
 halfList _ [] = []
 halfList _ [_] = error "halfList: odd list"
 
-cutInSlices :: V.Vector k -> Int -> [V.Vector k]
+cutInSlices :: V.Unbox k => V.Vector k -> Int -> [V.Vector k]
 cutInSlices v n | V.null v = []
                 | otherwise = let (tv, dv) = V.splitAt n v
                               in tv : cutInSlices dv n
@@ -92,7 +92,7 @@ ind2sub n = take n . go
     go i = let (p, q) = i `divMod` 2
            in (q /= 0) : go p
 
-compileStaticFaultTree :: Floating k => FaultTree k -> k -> [StaticFactor k]
+compileStaticFaultTree :: (Floating k, V.Unbox k) => FaultTree k -> k -> [StaticFactor k]
 compileStaticFaultTree ft t = map (uncurry $ compileNode) $ unFaultTree ft
   where
     make2 a b x f g | a /= b = generateStaticFactor [a, b, x] $ \[ba, bb, bx] -> f ba bb bx
